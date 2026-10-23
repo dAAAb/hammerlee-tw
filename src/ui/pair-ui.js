@@ -3,7 +3,7 @@
 // the seams, and a small chip that says the phones are linked (tap it to end). Big words, one clear action.
 import { encode } from 'uqr';
 import { openSheet, closeSheet, button, para, toast } from './sheet.js';
-import { pairLink, isPairCode, MAX_PHONES, BIG_ROOM } from '../net/pair.js';
+import { pairLink, isPairCode, takeInvite, MAX_PHONES, BIG_ROOM } from '../net/pair.js';
 
 export const PAIR_CSS = `
 .pair-info { margin: 10px 4px 4px; padding: 12px 14px; border: 2px dashed #c9bfa6; border-radius: 14px; background: #fff8e0; font-size: 17px; line-height: 1.6; }
@@ -38,6 +38,12 @@ export const PAIR_CSS = `
 .pair-chip[hidden] { display: none; }
 .pair-chip.lost::before { background: var(--yellow); }
 .pair-chip:focus-visible { outline: 4px solid var(--blue); outline-offset: 2px; }
+.sheet.pair-ask { position: fixed; left: 50%; top: calc(env(safe-area-inset-top, 0px) + 84px); transform: translateX(-50%); z-index: 28; box-sizing: border-box;
+  width: min(440px, calc(100vw - 32px)); max-height: none; border-bottom: 3px solid var(--ink); border-radius: 22px; padding: 14px 16px 16px; animation: sheetFade .2s ease-out;
+  background: var(--paper); box-shadow: 4px 4px 0 var(--ink), 0 0 0 100vmax rgba(12, 28, 64, .5); }
+.sheet.pair-ask[hidden] { display: none; }
+.pair-ask p { margin: 4px 2px 8px; }
+.pair-ask .pair-num { margin: 4px auto 8px; }
 @keyframes pairSwipe { 0% { transform: translateX(0) } 70%, 100% { transform: translateX(calc(min(460px, 100vw - 32px) - 130px)) } }
 @keyframes pairDots { from { width: 0 } to { width: 1.2em } }
 @media (prefers-reduced-motion: reduce) { .pair-swipe::before, .pair-wait::after, .pair-cal { animation: none; } }
@@ -97,14 +103,21 @@ export function openPairSheet(pair, { view = null } = {}) {
     const ph = pair.phase, n = pair.count;
     if (ph === 'hosting') {
       body.append(para(`請拿其他手機（最多再 ${MAX_PHONES - 1} 支），也打開「跟川伯聊天」：`));
-      body.append(para('① 用相機掃這個 QR 碼'), qrCanvas(pairLink(pair.code)));
-      body.append(para('② 或在那支手機按左下角的齒輪（設定），打開「多支手機一起玩」，按「開始配對」→「我要輸入配對碼」，輸入：'));
+      body.append(para('① 用相機掃這個 QR 碼（最快）'), qrCanvas(pairLink(pair.code, pair.secret, pair.key)));
+      body.append(para('② 或在那支手機按左下角的齒輪（設定），打開「多支手機一起玩」，按「開始配對」→「我要輸入配對碼」，輸入下面的號碼。輸入的手機要等這支手機按「讓它加入」：'));
       const c = document.createElement('div'); c.className = 'pair-code'; c.textContent = spaced(pair.code);
       c.setAttribute('aria-label', `配對碼 ${[...pair.code].join(' ')}`);
       body.append(c, para('等其他手機加入中', 'pair-wait'));
       body.append(acts(button('取消配對', () => { pair.end('cancel'); closeSheet(); })));
+    } else if (ph === 'joining' && pair.asking) {
+      // a typed code: the host is asked, and compares this number
+      const d = document.createElement('div'); d.className = 'pair-num'; d.textContent = String(pair.asking.check);
+      d.setAttribute('aria-label', `確認號碼 ${pair.asking.check}`);
+      body.append(para('正在問主手機能不能加入。主手機會問「它的畫面上是不是這個號碼？」：'), d,
+        para('請在主手機上按「是，讓它加入」。', 'pair-wait'));
+      body.append(acts(button('取消', () => { pair.end('cancel'); local = 'enter'; draw(); })));
     } else if (ph === 'joining') {
-      body.append(para(`正在連到配對碼 ${pair.code}`, 'pair-wait'));
+      body.append(para(`正在連到配對碼 ${spaced(pair.code)}`, 'pair-wait'));
       body.append(acts(button('取消', () => { pair.end('cancel'); local = 'enter'; draw(); })));
     } else if (ph === 'linked' || ph === 'lost') {
       if (n > 2) body.append(numBadge(pair));
@@ -114,7 +127,8 @@ export function openPairSheet(pair, { view = null } = {}) {
             : `${n} 支手機排好了，這支在${whereAmI(pair)}。每一排都有一個小川哥，從一端跑到另一端再跑回來。`));
       if (pair.anyAway) body.append(para('有手機斷線或收起來了，小川哥會先跳過它。'));
       if (n < MAX_PHONES && ph === 'linked') {
-        body.append(para(`還可以再加 ${MAX_PHONES - n} 支：用那支手機的相機掃 QR 碼，或在那支手機輸入配對碼 ${spaced(pair.code)}。`), qrCanvas(pairLink(pair.code)));
+        body.append(para(`還可以再加 ${MAX_PHONES - n} 支：用那支手機的相機掃 QR 碼，或在那支手機輸入配對碼 ${spaced(pair.code)}（要主手機按「讓它加入」）。`),
+          qrCanvas(pairLink(pair.code, pair.secret, pair.hostKey)));
       }
       body.append(acts(
         button('重新排一次', () => { closeSheet(); pair.startOver(); }),
@@ -172,10 +186,14 @@ const REASONS = {
   'peer-left': '另一支手機結束配對了。',
   'peer-gone': '另一支手機斷線了，配對結束。',
   dropped: '這支手機斷線太久，配對結束了。',
+  nope: '主手機沒有讓這支手機加入。',
+  noanswer: '主手機一直沒有回應，請再試一次。',
+  insecure: '這個網址不能用輸入配對碼加入，請改用相機掃主手機上的 QR 碼。',
 };
 
 // opened from a scanned QR (…/?pair=4827): ask first, nothing connects before 好
 export function offerJoin(code, onYes) {
+  takeInvite(code);   // the link's room secret and host id, out of the address bar
   openSheet({ title: '要跟其他手機一起玩嗎？' }, sheet => {
     sheet.append(para('有手機邀請你一起玩：把手機排成一排平放，小川哥會在手機之間跑來跑去。'));
     sheet.append(pairInfo());
@@ -301,13 +319,36 @@ export function calibrate(pair) {
   draw();
 }
 
+// The host is asked when a phone typed the code: 「它的畫面上是不是 47？」 是 lets it in, 不是 turns it away.
+function askPanel(pair) {
+  const box = document.createElement('div');
+  box.className = 'sheet pair-ask'; box.hidden = true;
+  box.setAttribute('role', 'alertdialog'); box.setAttribute('aria-label', '有手機想加入');
+  document.body.append(box);
+  let shown = null;
+  return () => {
+    const reqs = pair.isHost ? pair.requests : [];
+    box.hidden = !reqs.length;
+    const r = reqs[0];
+    if (!r || (shown === r.key && box.dataset.more === String(reqs.length))) return;
+    shown = r.key; box.dataset.more = String(reqs.length);
+    const n = document.createElement('div'); n.className = 'pair-num'; n.textContent = String(r.check);
+    const two = document.createElement('div'); two.className = 'acts two';
+    two.append(button('是，讓它加入', () => pair.approve(r.key), 'main'), button('不是', () => pair.decline(r.key)));
+    box.replaceChildren(para('有一支手機輸入了配對碼，想加入。它的畫面上是不是這個號碼？'), n, two);
+    if (reqs.length > 1) box.append(para(`還有 ${reqs.length - 1} 支在等。`, 'more'));
+  };
+}
+
 // "兩支手機連線中" / "3 支手機連線中" at the top while linked; tap it for the pairing sheet (and 結束配對)
 export function pairChip(pair, { top }) {
   const chip = document.createElement('button');
   chip.type = 'button'; chip.className = 'pair-chip'; chip.hidden = true;
   chip.addEventListener('click', () => openPairSheet(pair));
   document.body.append(chip);
+  const asks = askPanel(pair);
   pair.listen((ph, why) => {
+    asks();
     const n = pair.count, gone = pair.members.some(k => pair.gone.has(k)), resting = pair.members.some(k => pair.hidden.has(k));
     chip.hidden = !(ph === 'linked' || ph === 'lost');
     chip.classList.toggle('lost', ph === 'lost' || gone);

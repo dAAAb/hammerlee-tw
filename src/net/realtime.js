@@ -14,7 +14,7 @@
 // and a heartbeat on topic 'phoenix' every 25 s, or the server hangs up. A direct message is
 //   POST /realtime/v1/api/broadcast { messages: [{ topic: '<name>-<key>', event, payload, private: false }] }
 //
-//   const ch = openChannel('hl-pair-482731', { key, transport: 'realtime' | 'local', on: { status, message, presence } });
+//   const ch = openChannel('hl-room-<secret>', { key, transport: 'realtime' | 'local', inbox: true, on: { status, message, presence } });
 //   ch.track({ role: 'host' }); ch.send('layout', {...}); ch.sendTo(key, 'run', {...}); ch.wake(); ch.close();
 //   on.status('joined' | 'retry' | 'closed'), on.message(event, payload), on.presence(Map key -> meta)
 import { CONFIG } from '../config.js';
@@ -25,10 +25,10 @@ export function openChannel(name, opts) {
 const inboxOf = (name, key) => `${name}-${key}`;
 
 class RealtimeChannel {
-  constructor(name, { key, on }) {
+  constructor(name, { key, on, inbox = true }) {
     this.name = name;
     this.topic = `realtime:${name}`;
-    this.inbox = `realtime:${inboxOf(name, key)}`;
+    this.inbox = inbox ? `realtime:${inboxOf(name, key)}` : null;
     this.key = key;
     this.on = on;
     this.ref = 0;
@@ -50,7 +50,7 @@ class RealtimeChannel {
         return ref;
       };
       this.joinRef = join(this.topic, this.key);
-      this.inboxRef = join(this.inbox, '');
+      if (this.inbox) this.inboxRef = join(this.inbox, '');
       this.beat = setInterval(() => this.push('heartbeat', {}, 'phoenix'), 25000);
     };
     ws.onmessage = e => { try { this.receive(JSON.parse(e.data)); } catch (err) { /* not ours */ } };
@@ -81,7 +81,7 @@ class RealtimeChannel {
 
   receive(m) {
     const p = m.payload || {};
-    if (m.topic === this.inbox) {
+    if (this.inbox && m.topic === this.inbox) {
       if (m.event === 'broadcast' && p.event) this.on.message(p.event, p.payload || {});
       return;
     }
@@ -141,7 +141,7 @@ class RealtimeChannel {
     if (this.closed && !this.ws) return;
     this.closed = true;
     clearTimeout(this.again); clearInterval(this.beat);
-    if (this.joined) { this.push('phx_leave', {}); this.push('phx_leave', {}, this.inbox); }
+    if (this.joined) { this.push('phx_leave', {}); if (this.inbox) this.push('phx_leave', {}, this.inbox); }
     const ws = this.ws; this.ws = null;
     try { ws?.close(); } catch (e) { /* already gone */ }
   }

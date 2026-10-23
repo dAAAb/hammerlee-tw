@@ -1,10 +1,16 @@
 // 多支手機一起玩 (an opt-in 實驗功能): 2–52 phones lie in rows and mini 川哥 runs off one screen onto the next, to
 // the end of the row and back, faster the bigger the room.
 //
-// Pairing: one phone shows a 6-digit room code (and a QR code of a link that carries it); the others type the code
-// or scan the QR. All join one Realtime room named after the code. The phone that showed the code is the host and
-// keeps the room: it lets phones in (knock → welcome) and gives each a number, works out how they lie, and tells
-// everyone (layout). If the host leaves, the phone with the smallest number takes over.
+// Pairing: one phone (the host) opens a room named after a 128-bit random secret, and shows a QR code of a link that
+// carries the secret and its own id, plus a 6-digit code. A scanned QR goes straight into the room. A typed code only
+// leads to a lobby (hl-pair-<code>): the phone there shows a 2-digit check number and asks; the host's screen asks
+// 「它的畫面上是不是 47？」, and on 是 the host sends the secret sealed for that phone alone (ECDH P-256 + AES-GCM),
+// so nobody listening in the lobby learns it. In the room the host lets phones in (knock → welcome) and gives each
+// a number, works out how they lie, and tells everyone (layout). If the host leaves, the smallest number takes over.
+//
+// Who is listened to: only phones present in the room (Realtime presence); the host's word (welcome, layout) only
+// from the host this phone was sent to, or the one that took over; 川哥 only from the phone next to this one in its
+// row, and not too often. Strangers with the code can at most ask the host, a few at a time, and be told no.
 //
 // How they lie, three ways:
 //  - a swipe from one screen onto the next runs off the first at an edge ('out') and onto the second at the facing
@@ -23,8 +29,8 @@
 // Builds (fx/builds.js): now and then 川哥 stops and builds a little model. In a room only a few "lucky" phones,
 // drawn by the host, can get one, and less often the bigger the room.
 //
-// What travels: the room code (as the room's name), a random id and a number per visit, the edges and seam heights
-// of a swipe, and 川哥's position. No location, no personal data, nothing stored in a table.
+// What travels: the code and the secret (as names of the lobby and the room), a random id and a number per visit,
+// the edges and seam heights of a swipe, and 川哥's position. No location, no personal data, nothing stored in a table.
 // Nothing here runs, and no connection opens, until someone presses 顯示配對碼 or 輸入配對碼.
 import { openChannel } from './realtime.js';
 import { CONFIG, onPublicSite } from '../config.js';
@@ -39,11 +45,39 @@ export const MAX_PHONES = 52;
 export const BIG_ROOM = 7;        // from this many phones, line them up by number
 const LUCKY = 3;                  // phones that can get a build in a room
 export const isPairCode = s => /^\d{6}$/.test(s);
+const isSecret = s => typeof s === 'string' && /^[0-9a-f]{32}$/.test(s);
 
-// the link inside the QR code: opening it on another phone offers to join this room
-export function pairLink(code) {
+// randomness from the browser's cryptographic generator: codes, ids and room secrets can't be guessed from each other
+const rand = n => crypto.getRandomValues(new Uint8Array(n));
+const hex = b => [...b].map(x => x.toString(16).padStart(2, '0')).join('');
+const newKey = () => hex(rand(8));
+const newSecret = () => hex(rand(16));
+function newCode() {
+  const u = new Uint32Array(1);
+  do crypto.getRandomValues(u); while (u[0] >= 4294800000);   // 4294800000 = 4772 * 900000: no bias
+  return String(100000 + u[0] % 900000);
+}
+const b64 = u8 => btoa(String.fromCharCode(...u8));
+const unb64 = t => Uint8Array.from(atob(t), c => c.charCodeAt(0));
+const EC = { name: 'ECDH', namedCurve: 'P-256' };
+// the 2-digit number a phone asking to join shows, and the host compares: from the phone's public key
+async function checkOf(raw) { const h = new Uint8Array(await crypto.subtle.digest('SHA-256', raw)); return 10 + ((h[0] << 8 | h[1]) % 90); }
+
+// the link inside the QR code: opening it on another phone offers to join this room, no questions asked
+export function pairLink(code, secret, host) {
   const base = onPublicSite ? CONFIG.publicUrl : location.origin + location.pathname;
-  return `${base}?pair=${code}${!onPublicSite && pairTransport === 'realtime' ? '&realtime' : ''}`;
+  return `${base}?pair=${code}&pk=${secret}&ph=${host}${!onPublicSite && pairTransport === 'realtime' ? '&realtime' : ''}`;
+}
+
+// A scanned link's secret and host id, taken out of the address bar (so they don't linger or get shared on) and
+// kept until the person says yes to joining.
+let invite = null;
+export function takeInvite(code) {
+  const u = new URL(location.href), secret = u.searchParams.get('pk'), host = u.searchParams.get('ph');
+  if (!secret && !host) return;
+  u.searchParams.delete('pk'); u.searchParams.delete('ph');
+  history.replaceState(history.state, '', u);
+  invite = isSecret(secret) && /^[0-9a-f]{16}$/.test(host || '') ? { code, secret, host } : null;
 }
 
 // edges of a screen, the step to the cell beyond each, and the facing edge of the phone there
@@ -54,7 +88,8 @@ export const edgeOf = dir => (dir > 0 ? 'r' : 'l');
 const WAIT_HOST = 10 * 60e3;  // a shown code stays open this long with nobody joining
 const KNOCKS = 7;             // a joining phone asks this many times, 1.2 s apart, before giving up
 const GRACE = 25e3;           // a phone that drops off gets this long to come back
-const newKey = () => Math.random().toString(36).slice(2, 10);
+const ASK_WAIT = 90e3;        // a typed code waits this long for the host's 是
+const ASKS = 3;               // requests the host holds at once
 const num = (v, lo, hi, d = 0) => (Number.isFinite(+v) ? Math.min(hi, Math.max(lo, +v)) : d);
 const isKey = k => typeof k === 'string' && /^[a-z0-9]{1,16}$/.test(k);
 
@@ -112,6 +147,22 @@ export class Pair {
     this.hostKey = null;
     this.whole = false;
     this.knocking = null;
+    this.secret = null;
+    this.present = new Set();   // keys in the room's presence: the only ones listened to
+    this.knocks = new Set();    // host: knocks from keys not (yet) present
+    this.held = {};             // the host's welcome / newest layout that came early (presence lagging, or before our welcome)
+    this.v = 0;                 // the host's layout count: an older layout never replaces a newer one
+    this.asks = new Map();      // host: lobby requests waiting for 是 / 不是 (key -> { pub, check })
+    this.blocked = new Set();   // host: told 不是
+    this.sealed = new Map();    // host: invites already sent (key -> payload), sent again if that phone asks again
+    this.heldInvite = null;     // guest: an invite that came before the host showed up in the lobby's presence
+    this.lastAsk = 0;
+    this.lobbyHosts = new Set();
+    this.asking = null;         // guest at the lobby: { kp, pub, check }
+    this.asked = false;
+    this.lastRun = 0;
+    this.lastCall = 0;
+    this.edgeAt = new Map();
   }
 
   listen(fn) { this.listeners.add(fn); return () => this.listeners.delete(fn); }
@@ -219,34 +270,52 @@ export class Pair {
   defaultCols(n = this.count) { return n <= 6 ? n : n <= 12 ? Math.ceil(n / 2) : 6; }
 
   // --- pairing --------------------------------------------------------------------------------------
-  open(code, role) {
-    this.end();
-    this.reset();
-    this.code = code; this.role = role; this.key = newKey();
-    this.ch = openChannel(`hl-pair-${code}`, {
+  // the room itself, named after its secret: only phones given the secret can find it
+  openRoom() {
+    this.ch = openChannel(`hl-room-${this.secret}`, {
       key: this.key, transport: pairTransport,
-      on: { status: s => this.status(s), message: (ev, p) => this.message(ev, p), presence: m => this.presence(m) },
+      on: { status: st => this.status(st), message: (ev, p) => this.message(ev, p), presence: m => this.presence(m) },
+    });
+  }
+  // the lobby a typed code leads to: the host listens there for requests; a phone asking gets an inbox for the answer
+  openLobby() {
+    this.lobby?.close();
+    this.asked = false;
+    this.lobby = openChannel(`hl-pair-${this.code}`, {
+      key: this.key, transport: pairTransport, inbox: !this.isHost,
+      on: { status: st => this.lobbyStatus(st), message: (ev, p) => this.lobbyMessage(ev, p), presence: m => this.lobbyPresence(m) },
     });
   }
 
   host() {
-    this.open(String(100000 + Math.floor(Math.random() * 900000)), 'host');
+    this.end();
+    this.reset();
+    this.role = 'host'; this.key = newKey(); this.code = newCode(); this.secret = newSecret();
     this.members = [this.key]; this.hostKey = this.key; this.nums.set(this.key, ++this.counter);
     this.mine = true; this.holders.add(this.key);
     this.place();
+    this.openRoom();
+    this.openLobby();
     this.set('hosting');
     this.later(WAIT_HOST, () => { if (this.phase === 'hosting') this.end('timeout'); });
   }
 
+  // a scanned link brings the secret and the host's id: straight in. A typed code asks the host first.
   join(code) {
-    this.open(code, 'guest');
+    const inv = invite?.code === code ? invite : null;
+    invite = null;
+    this.end();
+    this.reset();
+    this.role = 'guest'; this.key = newKey(); this.code = code;
     this.set('joining');
+    if (inv) { this.secret = inv.secret; this.hostKey = inv.host; this.openRoom(); } else this.ask();
   }
 
   end(why) {
-    if (!this.ch) return;
+    if (!this.ch && !this.lobby) return;
     this.send('bye', {});
-    this.ch.close(); this.ch = null;
+    this.ch?.close(); this.ch = null;
+    this.lobby?.close(); this.lobby = null;
     for (const t of this.timers) { clearTimeout(t); clearInterval(t); }
     this.timers.clear();
     this.reset();
@@ -256,9 +325,122 @@ export class Pair {
   send(event, p) { return this.ch?.send(event, { ...p, from: this.key }) || false; }
   direct(to, event, p) { return !!to && (this.ch?.sendTo(to, event, { ...p, from: this.key, to }) || false); }
 
-  status(s) {
-    if (s === 'closed') { this.end('offline'); return; }
-    if (s !== 'joined') return;
+  // --- the lobby: a typed code asks, the host says 是 or 不是 -------------------------------------------
+  async ask() {
+    try {
+      const kp = await crypto.subtle.generateKey(EC, false, ['deriveKey']);
+      const raw = new Uint8Array(await crypto.subtle.exportKey('raw', kp.publicKey));
+      const check = await checkOf(raw);
+      if (this.phase !== 'joining') return;
+      this.asking = { kp, pub: b64(raw), check };
+    } catch (e) { this.end('insecure'); return; }   // no WebCrypto (a plain-http address): scan the QR instead
+    this.openLobby();
+    this.set('joining');
+    this.later(ASK_WAIT, () => { if (this.asking) this.end('noanswer'); });
+  }
+
+  lobbyStatus(st) {
+    if (st === 'closed') { if (this.asking) this.end('offline'); return; }
+    if (st !== 'joined') return;
+    this.lobby.track({ role: this.role });
+    if (!this.asking || this.asked) return;
+    this.asked = true;
+    const ask = () => { if (this.asking) this.lobby?.send('ask', { from: this.key, pub: this.asking.pub }); };
+    ask();
+    this.every(3000, ask);
+    this.later(8000, () => { if (this.asking && !this.lobbyHosts.size) this.end('nohost'); });
+  }
+
+  lobbyPresence(m) {
+    this.lobbyHosts = new Set([...m].filter(([k, v]) => k !== this.key && v?.role === 'host').map(([k]) => k));
+    if (this.heldInvite && this.lobbyHosts.has(this.heldInvite.from)) { const p = this.heldInvite; this.heldInvite = null; this.opened(p.from, p); }
+    // two rooms drew the same code: the one with the larger id draws a new one (its room and secret stay)
+    if (this.isHost && this.phase === 'hosting' && [...this.lobbyHosts].some(k => k < this.key)) {
+      this.code = newCode();
+      this.openLobby();
+      this.set(this.phase);
+    }
+  }
+
+  async lobbyMessage(ev, p) {
+    if (!p || !isKey(p.from) || p.from === this.key || (p.to && p.to !== this.key)) return;
+    const f = p.from;
+    if (this.isHost) {
+      if (ev !== 'ask' || typeof p.pub !== 'string' || p.pub.length > 120 || this.blocked.has(f) || this.asks.has(f)) return;
+      // already said 是 and the phone asks again: the invite went missing, send the same one again
+      const sent = this.sealed.get(f);
+      if (sent) { if (sent.for === p.pub) this.lobby?.sendTo(f, 'invite', sent.msg); return; }
+      if ([...this.asks.values()].some(a => a.pub === p.pub)) return;          // someone repeating another's request
+      if (this.members.length >= MAX_PHONES) { this.lobby?.sendTo(f, 'full', { from: this.key, to: f }); return; }
+      const now = performance.now();
+      if (this.asks.size >= ASKS || now - this.lastAsk < 1500) return;         // a few at a time: the rest ask again
+      this.lastAsk = now;
+      let check;
+      try { check = await checkOf(unb64(p.pub)); } catch (e) { return; }
+      if (this.asks.has(f) || this.asks.size >= ASKS) return;
+      this.asks.set(f, { pub: p.pub, check });
+      this.later(60e3, () => { if (this.asks.delete(f)) this.set(this.phase); });
+      this.set(this.phase);
+      return;
+    }
+    if (!this.asking) return;
+    // (presence can lag the host's answer a moment)
+    if (!this.lobbyHosts.has(f)) { if (ev === 'invite') this.heldInvite = p; return; }
+    if (ev === 'nope') this.end('nope');
+    else if (ev === 'full') this.end('full');
+    else if (ev === 'invite') this.opened(f, p);
+  }
+
+  // host: the requests waiting, oldest first
+  get requests() { return [...this.asks].map(([key, a]) => ({ key, check: a.check })); }
+
+  // host: 是 — seal the room's secret (and this host's id) for that phone alone
+  async approve(k) {
+    const a = this.asks.get(k);
+    if (!a || !this.lobby) return;
+    this.asks.delete(k);
+    this.set(this.phase);
+    try {
+      const kp = await crypto.subtle.generateKey(EC, false, ['deriveKey']);
+      const theirs = await crypto.subtle.importKey('raw', unb64(a.pub), EC, false, []);
+      const aes = await crypto.subtle.deriveKey({ name: 'ECDH', public: theirs }, kp.privateKey, { name: 'AES-GCM', length: 256 }, false, ['encrypt']);
+      const iv = rand(12);
+      const ct = await crypto.subtle.encrypt({ name: 'AES-GCM', iv }, aes, new TextEncoder().encode(JSON.stringify({ s: this.secret, h: this.key })));
+      const pub = new Uint8Array(await crypto.subtle.exportKey('raw', kp.publicKey));
+      const msg = { from: this.key, to: k, pub: b64(pub), iv: b64(iv), ct: b64(new Uint8Array(ct)) };
+      this.sealed.set(k, { for: a.pub, msg });
+      this.lobby?.sendTo(k, 'invite', msg);
+    } catch (e) { /* a broken key: nothing to send */ }
+  }
+
+  // host: 不是
+  decline(k) {
+    if (!this.asks.delete(k)) return;
+    this.blocked.add(k);
+    this.lobby?.sendTo(k, 'nope', { from: this.key, to: k });
+    this.set(this.phase);
+  }
+
+  // guest: the host said 是 — open the seal and go into the room
+  async opened(f, p) {
+    try {
+      const theirs = await crypto.subtle.importKey('raw', unb64(p.pub), EC, false, []);
+      const aes = await crypto.subtle.deriveKey({ name: 'ECDH', public: theirs }, this.asking.kp.privateKey, { name: 'AES-GCM', length: 256 }, false, ['decrypt']);
+      const plain = await crypto.subtle.decrypt({ name: 'AES-GCM', iv: unb64(p.iv) }, aes, unb64(p.ct));
+      const msg = JSON.parse(new TextDecoder().decode(plain));
+      if (!isSecret(msg.s) || msg.h !== f || this.phase !== 'joining' || !this.asking) return;
+      this.asking = null;
+      this.lobby?.close(); this.lobby = null;
+      this.secret = msg.s; this.hostKey = f;
+      this.openRoom();
+      this.set(this.phase);
+    } catch (e) { /* not sealed for this phone */ }
+  }
+
+  // --- the room -------------------------------------------------------------------------------------
+  status(st) {
+    if (st === 'closed') { this.end('offline'); return; }
+    if (st !== 'joined') return;
     this.ch.track({ role: this.role });
     if (this.role !== 'guest') return;
     // knock until the host answers: on the first join, and again after a dropped line
@@ -274,11 +456,18 @@ export class Pair {
     knock();
   }
 
+  hold(ev, p) {
+    if (ev === 'welcome' || !this.held.layout || num(p.v, 0, 1e9) >= num(this.held.layout.v, 0, 1e9)) this.held[ev] = p;
+  }
+
   presence(m) {
-    // two phones showed the same code: the one with the larger id picks a new one
-    if (this.phase === 'hosting' && [...m].some(([k, v]) => k !== this.key && v?.role === 'host' && k < this.key)) {
-      this.host();
-      return;
+    this.present = new Set(m.keys());
+    // a knock is answered once the knocker shows up in the room (a key that never does is no phone)
+    if (this.isHost) for (const k of [...this.knocks]) if (this.present.has(k)) { this.knocks.delete(k); this.admit(k); }
+    // the host's word that came while presence lagged: the welcome first, then the latest layout
+    for (const ev of ['welcome', 'layout']) {
+      const h = this.held[ev];
+      if (h && this.present.has(h.from)) { delete this.held[ev]; this.message(ev, h); }
     }
     let changed = false;
     for (const k of this.members) {
@@ -318,20 +507,34 @@ export class Pair {
     if (!this.ch || !p || !isKey(p.from) || p.from === this.key) return;
     if (p.to && p.to !== this.key) return;
     const f = p.from;
+    // only phones that are in the room's presence are listened to
+    if (!this.present.has(f)) {
+      if ((ev === 'welcome' || ev === 'layout') && f === this.hostKey) this.hold(ev, p);   // presence can lag a moment
+      else if (ev === 'knock' && this.isHost && this.knocks.size < 64) this.knocks.add(f);
+      return;
+    }
     if (this.isHost && ev === 'knock') { this.admit(f); return; }
-    if (!this.isHost) {
+    if (!this.isHost && (ev === 'welcome' || ev === 'full' || ev === 'layout')) {
+      // the host's word, only from the host this phone was sent to (or the one that took over)
+      if (f !== this.hostKey) return;
+      if (ev === 'layout' && this.phase === 'joining') { this.hold(ev, p); return; }   // our welcome is still on its way
       if (ev === 'welcome') {
-        // the welcome carries the room as it is (it can come after the room-wide layout that announced us)
-        this.hostKey = f; this.welcomed = true;
+        if (this.welcomed) return;
+        // the welcome carries the room as it is; a newer layout may have come ahead of it
+        this.welcomed = true;
         if (this.phase === 'joining') { this.phase = 'linked'; this.pings(); }
         if (Array.isArray(p.members)) this.onLayout(f, p); else this.set(this.phase);
-        return;
-      }
-      if (ev === 'full' && this.phase === 'joining') { this.end('full'); return; }
-      if (ev === 'layout') { this.onLayout(f, p); return; }
+        const L = this.held.layout;
+        if (L) { delete this.held.layout; this.onLayout(f, L); }
+      } else if (ev === 'full') {
+        if (this.phase === 'joining') this.end('full');
+      } else this.onLayout(f, p);
+      return;
     }
     if (!this.members.includes(f)) return;
-    const r = this.runner;
+    const r = this.runner, now = performance.now();
+    // 川哥 comes only from the phone next to this one in its row, and not more than once a moment
+    const beside = f === this.neighbor(this.key, 'l') || f === this.neighbor(this.key, 'r');
     switch (ev) {
       case 'ping':
         if (!this.isHost) break;
@@ -345,10 +548,17 @@ export class Pair {
         if (rtt <= this.best) { this.best = rtt; this.offset = num(p.h, 0, Infinity) - (num(p.t, 0, Infinity) + now) / 2; }
         break;
       }
-      case 'edge': if (this.isHost && Array.isArray(p.list)) this.onEdges(f, p.list.slice(0, 4)); break;
+      case 'edge':
+        if (!this.isHost || !Array.isArray(p.list) || now - (this.edgeAt.get(f) || 0) < 250) break;
+        this.edgeAt.set(f, now);
+        this.onEdges(f, p.list.slice(0, 4));
+        break;
+      case 'sync': if (this.isHost) this.direct(f, 'layout', this.layout()); break;
       case 'queue': if (this.isHost) this.onQueue(f); break;
       case 'again': if (this.isHost) this.onStartOver(); break;
       case 'run': {
+        if (!beside || now - this.lastRun < 800) break;
+        this.lastRun = now;
         const dir = p.dir === -1 ? -1 : 1;
         this.took(f);
         r?.enter({
@@ -366,11 +576,12 @@ export class Pair {
         break;
       case 'call': {
         // the 川哥 of the caller's row comes over
-        if (!this.mine || !this.row().includes(f)) break;
+        if (!this.mine || !this.row().includes(f) || now - this.lastCall < 1000) break;
+        this.lastCall = now;
         r?.called(0, Math.sign(this.cells.get(f)[0] - this.cells.get(this.key)[0]));
         break;
       }
-      case 'give': this.took(f); break;
+      case 'give': if (beside) this.took(f); break;
       case 'vis': if (p.hidden) this.hidden.add(f); else this.hidden.delete(f); this.changed(); break;
       case 'bye':
         if (this.isHost) this.drop(f, 'peer-left');
@@ -404,12 +615,18 @@ export class Pair {
     const next = this.members.filter(k => !this.gone.has(k)).sort((a, b) => (this.nums.get(a) || 1e9) - (this.nums.get(b) || 1e9))[0] || this.members[0];
     this.hostKey = next;
     if (this.phase === 'lost') this.set('linked');
-    if (next !== this.key) { this.place(); this.changed(); return; }
+    if (next !== this.key) {
+      this.place(); this.changed();
+      this.later(1500, () => { if (this.hostKey === next) this.direct(next, 'sync', {}); });   // the room as the new host has it
+      return;
+    }
     this.role = 'host';
     this.ch.track({ role: 'host' });
     this.counter = Math.max(0, ...this.nums.values());
     if (this.mine) this.holders.add(this.key);
     this.stop(this.knocking);
+    this.welcomed = true;
+    this.openLobby();
     this.drawLucky();
     this.publish();
   }
@@ -425,11 +642,13 @@ export class Pair {
       if (!have.length) this.holders.add(r[0]); else have.slice(1).forEach(k => this.holders.delete(k));
     }
     this.mine = this.holders.has(this.key) || (this.mine && !this.complete);
+    this.v++;
     this.send('layout', this.layout());
     this.changed();
   }
   layout() {
     return {
+      v: this.v,
       members: this.members, nums: Object.fromEntries(this.nums), links: this.links, cols: this.cols,
       queued: this.queued, holders: [...this.holders], lucky: [...this.lucky],
     };
@@ -438,9 +657,8 @@ export class Pair {
   onLayout(f, p) {
     // not let in yet: the room's news is about the phones that are
     if (this.phase === 'joining' || !this.hostKey || !Array.isArray(p.members) || !Array.isArray(p.links)) return;
-    // the host's word; after a hand-over, the new host's (the smallest number still here)
-    const n = k => this.nums.get(k) || 1e9;
-    if (f !== this.hostKey && !this.gone.has(this.hostKey) && this.members.includes(this.hostKey) && n(f) >= n(this.hostKey)) return;
+    if (num(p.v, 0, 1e9) < this.v) return;   // older than what this phone has
+    this.v = num(p.v, 0, 1e9);
     const members = p.members.filter(isKey).slice(0, MAX_PHONES);
     // dropped from the room (gone too long): this visit's pairing is over
     if (!members.includes(this.key)) { this.end('dropped'); return; }
