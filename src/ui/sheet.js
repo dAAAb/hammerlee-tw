@@ -57,10 +57,16 @@ export function toast(msg, ms = 2200) {
   setTimeout(() => t.remove(), ms);
 }
 
-export function closeSheet() { if (open) { open.remove(); open = null; } }
+export function closeSheet() {
+  if (!open) return;
+  const was = open;
+  open = null;
+  was.remove();
+  was.onClose?.();
+}
 
-// body: array of nodes; returns the sheet element
-export function openSheet({ title, label }, build) {
+// body: array of nodes; returns the sheet element. onClose runs however the sheet goes away.
+export function openSheet({ title, label, onClose }, build) {
   closeSheet();
   const back = document.createElement('div');
   back.className = 'sheet-back';
@@ -76,6 +82,7 @@ export function openSheet({ title, label }, build) {
   const close = button('關閉', closeSheet, 'close');
   sheet.append(close);
   back.append(sheet);
+  back.onClose = onClose;
   document.body.append(back);
   open = back;
   addEventListener('keydown', function esc(e) { if (e.key === 'Escape') { closeSheet(); removeEventListener('keydown', esc); } });

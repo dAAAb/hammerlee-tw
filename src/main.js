@@ -27,11 +27,13 @@ import { createMeSticker } from './models/stickers-me.js';
 import { createChuanSticker } from './models/stickers-chuan.js';
 import { createChuanAvatar, createChuanHead } from './models/chuan-avatar.js';
 import { createChuan } from './models/chuan.js';
+import { Pair, pairTransport, isPairCode } from './net/pair.js';
+import { PAIR_CSS, openPairSheet, offerJoin, pairChip, pairInfo } from './ui/pair-ui.js';
 
 registerModels({ makeEmoji, createMeSticker, createChuanSticker, createChuanAvatar, createChuan, createChuanHead });
 
 const style = document.createElement('style');
-style.textContent = TEXT_LAYER_CSS + SHEET_CSS;
+style.textContent = TEXT_LAYER_CSS + SHEET_CSS + PAIR_CSS;
 document.head.append(style);
 
 const q = new URLSearchParams(location.search);
@@ -74,7 +76,7 @@ const SETTINGS_KEY = 'hl:settings';
 // the look defaults are the easiest to read; people can make it more 3D or more hand-drawn in 設定
 const LOOK_DEFAULTS = { depth: TEXT_DEPTH, shadow: 1, hand: 1 };
 const settings = (() => {
-  const base = { sound: false, vibrate: false, tilt: false, ...LOOK_DEFAULTS };
+  const base = { sound: false, vibrate: false, tilt: false, pair: false, ...LOOK_DEFAULTS };
   try { return { ...base, ...JSON.parse(localStorage.getItem(SETTINGS_KEY) || '{}') }; } catch (e) { return base; }
 })();
 function applyLook() {
@@ -118,6 +120,18 @@ const calm = matchMedia('(prefers-reduced-motion: reduce)').matches;
 runner = q.has('norunner') ? null : new Runner(app, createChuan, { calm, sfx: play });
 scenery = new SideScenery(app, createScenery);
 if (q.has('debug')) window.__runner = runner;
+
+// 兩支手機一起玩 (實驗功能): off by default. Nothing is set up, and nothing connects, until it is turned on in 設定
+// and someone presses 顯示配對碼 / 輸入配對碼, or says yes to the invitation a scanned QR code opens.
+let pair = null;
+function getPair() {
+  if (!pair) {
+    pair = new Pair({ runner });
+    pairChip(pair, { top: () => app.chrome.headerH * app.chrome.unit * stage.emPx });
+    if (q.has('debug')) window.__pair = pair;
+  }
+  return pair;
+}
 window.__app = app;
 if (q.has('at')) app.jumpTo(+q.get('at'));
 if (q.has('debug')) window.__hl = { stage, font, chat, builderOpts, shareCard, longImage, badgeCanvas, stickerCanvas, renderSnippet, pickSnippet };
@@ -285,6 +299,22 @@ function openSettings() {
       toast('已恢復預設');
     }));
     sheet.append(reset);
+    const lab = document.createElement('h3'); lab.className = 'set-head'; lab.textContent = '實驗功能';
+    sheet.append(lab);
+    const pairBox = document.createElement('div'); pairBox.className = 'acts';
+    const paintPair = () => {
+      pairBox.replaceChildren();
+      if (settings.pair) pairBox.append(button(pair && pair.phase !== 'idle' ? '配對狀態／結束配對' : '開始配對', () => openPairSheet(getPair()), 'main'));
+    };
+    sheet.append(toggle('兩支手機一起玩', '把兩支手機並排平放，小川哥會從這支手機跑到另一支。打開以後，要按「開始配對」才會連線。', settings.pair, v => {
+      if (v && !pairTransport) { toast('這裡不能用，請到 hammerlee.tw 試試'); return false; }
+      settings.pair = v; saveSettings();
+      if (!v) pair?.end('off');
+      paintPair();
+      return v;
+    }));
+    sheet.append(pairInfo(), pairBox);
+    paintPair();
     const again = document.createElement('div'); again.className = 'acts';
     again.append(button('跟川伯重新聊一次（換一段新的）', () => { location.hash = ''; location.reload(); }));
     sheet.append(again);
@@ -296,12 +326,16 @@ function openSettings() {
       <h3>隱私</h3>
       <p>不需要登入，也不會要你輸入任何資料。對話結束時，只會記錄這段對話的編號、聊到的話題和時間，用來讓分享連結顯示預覽圖；
       設定只存在你自己的手機裡。立體視角只在你的手機上計算，不會傳出去。</p>
+      <p>「兩支手機一起玩」是實驗功能，預設是關的。只有你打開它、按下配對以後才會連線：兩支手機透過 Supabase 的即時訊息服務，
+      只傳一組臨時的四位數配對碼、另一支手機在左邊還是右邊，和小川哥跑到哪裡、跑多快。不會用到你的位置（GPS）或藍牙，
+      不會傳任何個人資料，也不會存進資料庫。結束配對或關掉網頁，連線就斷了。</p>
       <h3>開源授權與致謝</h3>
       <ul>
         <li><a href="https://threejs.org" target="_blank" rel="noopener">three.js</a> — MIT License</li>
         <li><a href="https://github.com/justfont/Huninn" target="_blank" rel="noopener">jf 粉圓 Huninn</a> — SIL Open Font License 1.1</li>
         <li><a href="https://github.com/chiron-fonts/chiron-goround-tc" target="_blank" rel="noopener">Chiron GoRound TC</a> — SIL Open Font License 1.1</li>
         <li>畫風參考 <a href="https://april-zhu.com/colorfigures" target="_blank" rel="noopener">Colorfigures</a>（April Zhu）— MIT License</li>
+        <li><a href="https://github.com/unjs/uqr" target="_blank" rel="noopener">uqr</a>（配對用的 QR 碼）— MIT License</li>
         <li>Google Fonts 提供網頁字型服務</li>
       </ul>
       <p class="note">對話編號 No. ${serial}</p>`;
@@ -356,6 +390,14 @@ function openShare() {
     again.append(button('跟川伯再聊一次（換一段新的）', () => { location.hash = ''; location.reload(); }));
     sheet.append(again);
   });
+}
+
+// a scanned pairing QR code: …/?pair=4827
+if (q.has('pair')) {
+  const code = q.get('pair'), u = new URL(location.href);
+  u.searchParams.delete('pair');
+  history.replaceState(null, '', u);
+  if (pairTransport && isPairCode(code)) offerJoin(code, c => { settings.pair = true; saveSettings(); const p = getPair(); p.join(c); openPairSheet(p); });
 }
 
 document.getElementById('boot').classList.add('gone');

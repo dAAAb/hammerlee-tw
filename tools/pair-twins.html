@@ -1,0 +1,11 @@
+<!doctype html><meta charset="utf-8"><title>兩支手機一起玩：測試</title>
+<!-- Two "phones" side by side on one screen, for 兩支手機一起玩 (實驗功能). Copy next to the build and open it:
+       cp tools/pair-twins.html dist/ && npm run serve   ->  http://localhost:5173/pair-twins.html
+     Query flags pass through to both phones: ?realtime (go through Supabase Realtime), ?lag=150 (slow local link). -->
+<style>
+html, body { margin: 0; height: 100%; background: #2b2b2b; }
+body { display: flex; gap: 18px; justify-content: center; align-items: center; }
+iframe { width: 360px; height: 700px; max-height: 96vh; border: 0; border-radius: 18px; background: #a9c6ea; flex: none; }
+</style>
+<iframe title="手機 A"></iframe><iframe title="手機 B"></iframe>
+<script>for (const f of document.querySelectorAll('iframe')) f.src = 'index.html?nointro&debug' + location.search.replace(/^\?/, '&');</script>
