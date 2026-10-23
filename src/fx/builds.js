@@ -21,7 +21,7 @@ export const BUILDS = [
   { id: 'overpass', tier: 'N', model: 'overpass', name: '學校旁的天橋', note: '他說：「我在校園周圍蓋過天橋。」' },
   { id: 'pump', tier: 'N', model: 'pump', name: '抽水站與水門', note: '做過工務局長，負責治水。' },
   { id: 'daycare', tier: 'N', model: 'family', name: '新北第一所公托', note: '民國 100 年新北第一所公托，他有參與。' },
-  { id: 'arena', tier: 'R', model: 'arena', name: '台北小巨蛋', note: '剛進台北市工務局時，參與過小巨蛋工程。' },
+  { id: 'arena', tier: 'R', model: 'arena', name: '台北小巨蛋', note: '在台北市工務局的時候，參與過小巨蛋工程。' },
   { id: 'cityhall', tier: 'R', model: 'cityhall', name: '台北市政府大樓', note: '在信義計畫區的市府大樓當過監工。' },
   { id: 'crossing', tier: 'R', model: 'crossing', name: '公館圓環改善', note: '公館圓環改善以後，事故率降了 51%。' },
   { id: 'hospital', tier: 'SR', model: 'medical', name: '土城醫院', note: '從會勘、協調到一層一層蓋起來，跟了五年。' },

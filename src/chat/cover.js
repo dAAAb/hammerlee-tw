@@ -47,9 +47,16 @@ export function buildCover(font, W) {
   for (const ch of sub) { sitems.push({ ch, x: pen, z: 7.95, size: ss, depth: 0.12, y: 0 }); pen += font.advance(ch) * ss; }
   const sgeo = font.build(sitems);
   if (sgeo) g.add(new THREE.Mesh(sgeo, toon('text', { top: '#163c84', text: true })));
+  // the conversation is written from his public statements, and says so up front
+  const note = '模擬對話・內容依據川伯的公開政見與經歷整理', ns = 0.46, nw = font.measure(note, ns);
+  const nitems = [];
+  pen = -nw / 2;
+  for (const ch of note) { nitems.push({ ch, x: pen, z: 8.95, size: ns, depth: 0.06, y: 0 }); pen += font.advance(ch) * ns; }
+  const ngeo = font.build(nitems);
+  if (ngeo) g.add(new THREE.Mesh(ngeo, toon('text', { top: '#5d6f92', text: true })));
   g.userData.tick = t => {
     bars.children.forEach((b, k) => { b.scale.y = 1 + Math.sin(t * 2.2 - k * 0.45) * 0.06; });
   };
-  g.userData.size = { w: Math.max(plateW, 11), h: 9 };
+  g.userData.size = { w: Math.max(plateW, 11), h: 9.8 };
   return g;
 }

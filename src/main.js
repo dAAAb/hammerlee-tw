@@ -155,7 +155,7 @@ builds = new Builds(app, createScenery, {
     play(rare ? 'badge' : 'built');
     track('build_made', { item_type: s.b.tier, item_id: s.b.id });
     if (rare) confetti = burst(stage.scene, new THREE.Vector3(s.x, 0, s.z), calm ? 20 : 60);
-    toast(`${s.count[s.b.id] === 1 ? '新！' : ''}川哥蓋好了${s.b.tier}「${s.b.name}」，點一下看看`, 3600);
+    toast(`${s.count[s.b.id] === 1 ? '新！' : ''}川哥做了一個「${s.b.name}」的小模型，點一下看看`, 3600);
   },
 });
 runner = q.has('norunner') ? null : new Runner(app, createChuan, { calm, sfx: play, builds });

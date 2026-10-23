@@ -37,7 +37,7 @@ export function layoutChat(chat, font, opts) {
   const rng = mulberry32(hashString(String(chat.id))[0]);
 
   // the cover sits above the first message (not in snippets or replays of a few lines)
-  if (opts.cover) { items.push({ msg: { kind: 'cover' }, kind: 'cover', z: 0, h: 9.2, x: 0, w: W, who: 'sys' }); z = 9.2; }
+  if (opts.cover) { items.push({ msg: { kind: 'cover' }, kind: 'cover', z: 0, h: 10, x: 0, w: W, who: 'sys' }); z = 10; }
 
   for (const msg of chat.msgs) {
     if (msg.kind === 'topic') { items.push({ msg, kind: 'topic', z, h: 0, x: 0, w: 0 }); continue; }

@@ -125,6 +125,7 @@ export function shareCard(stage, font, chat, builderOpts) {
   g.fillStyle = YELLOW; rr(g, x, 488, 494, 92, 46); g.fill();
   g.lineWidth = 5; g.strokeStyle = INK; g.stroke();
   text(g, font, '邀請你也來跟川伯聊天 →', x + 247, 548, 34, '#2a1c00', { align: 'center' });
+  text(g, font, '模擬對話・內容依據李四川的公開政見與經歷整理', 36, 621, 17, '#bcd3ff');
   return cv;
 }
 
@@ -194,6 +195,7 @@ export async function longImage(stage, font, chat, builderOpts, { width = 900, o
   text(g, font, '這是只屬於我的一段對話', 320, 110, 38, NAVY);
   text(g, font, '你也來跟川伯聊聊天吧！', 320, 170, 38, INK);
   text(g, font, '11 月 28 日 新北的事 交給做過的人', 320, 236, 28, '#5d6f92');
+  text(g, font, '模擬對話・內容依據川伯的公開政見與經歷整理', 320, 292, 22, '#5d6f92');
   g.restore();
   return out;
 }
