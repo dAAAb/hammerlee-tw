@@ -1,7 +1,7 @@
 // Draw one conversation from the script. The same function serves a fresh random chat and the replay of a
 // shared id (DecodeChooser): every decision goes through chooser.pick, in the same order.
 import { walk, count, orderedPicks, RandomChooser, DecodeChooser } from './dsl.js';
-import { GREETINGS, OPENING, NVIDIA, PAST, BRIDGE, FUTURE_A, FUTURE_B, INTERLUDES, CLOSING, OUTRO } from './script.js';
+import { GREETINGS, OPENING, NVIDIA, PAST_LEAD, PAST, BRIDGE, FUTURE_A, FUTURE_B, INTERLUDES, CLOSING, OUTRO } from './script.js';
 
 export const SCRIPT_VERSION = 1;
 
@@ -25,6 +25,7 @@ export function generate(chooser, { hour = new Date().getHours() } = {}) {
   // the past: NVIDIA, then one more story
   topics.push(NVIDIA);
   run(NVIDIA.seq, NVIDIA.id);
+  run(PAST_LEAD, 'past');
   const story = PAST[chooser.pick(PAST.length)];
   topics.push(story);
   run(story.seq, story.id);
@@ -82,5 +83,5 @@ export function totalConversations() {
   const inter1 = sum(INTERLUDES.map(s => count(s)));
   // elder policy x other policy x 2 orders, one breather in one of 6 gaps
   const fB = eB * oB * 2n * 6n * inter1;
-  return greet * count(OPENING) * count(NVIDIA.seq) * past * count(BRIDGE) * fA * fB * count(CLOSING) * count(OUTRO);
+  return greet * count(OPENING) * count(NVIDIA.seq) * count(PAST_LEAD) * past * count(BRIDGE) * fA * fB * count(CLOSING) * count(OUTRO);
 }

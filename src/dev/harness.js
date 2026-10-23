@@ -16,7 +16,7 @@ export const params = new URLSearchParams(location.search);
 export async function bench() {
   document.getElementById('boot')?.remove();
   const stage = new Stage(document.getElementById('stage'));
-  const font = await GlyphFont.load('glyphs.bin');
+  const font = await GlyphFont.load('glyphs.txt');
   const floor = new THREE.Mesh(new THREE.PlaneGeometry(600, 600).rotateX(-Math.PI / 2), floorMaterial());
   floor.receiveShadow = true;
   stage.scene.add(floor);

@@ -42,6 +42,11 @@ function syncFont() {
   lastCharset = charset;
 }
 
+// Hosts that only serve web types (the claude.ai Artifact) get the outlines as base64 text: dist/glyphs.txt
+function writeGlyphText() {
+  if (existsSync('dist/glyphs.bin')) writeFileSync('dist/glyphs.txt', readFileSync('dist/glyphs.bin').toString('base64'));
+}
+
 async function once() {
   const t = Date.now();
   syncFont();
@@ -51,12 +56,14 @@ async function once() {
   if (outName) {
     writeFileSync(outName, full);
     if (existsSync('public')) cpSync('public', 'dist', { recursive: true });
+    writeGlyphText();
     console.log(`built ${outName} in ${Date.now() - t}ms`);
     return;
   }
   writeFileSync('dist/artifact.html', frag);
   writeFileSync('dist/index.html', `<!doctype html><html lang="zh-Hant"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover"></head><body>${frag}</body></html>`);
   if (existsSync('public')) cpSync('public', 'dist', { recursive: true });
+  writeGlyphText();
   console.log(`built in ${Date.now() - t}ms — app ${(js.length / 1024).toFixed(0)} KB`);
 }
 

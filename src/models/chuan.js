@@ -36,7 +36,7 @@ let MAT = null;
 function mats() {
   if (MAT) return MAT;
   MAT = {
-    skin: toon('skin'), hair: toon('hair'), shirt: toon('shirt'), pants: toon('pants'), white: toon('white'),
+    skin: toon('skin'), hair: toon({ l: '#5b5551', m: '#34302d', d: '#191715' }), shirt: toon('shirt'), pants: toon('pants'), white: toon('white'),
     yellow: toon('yellow'), navy: toon('navy'), metal: toon('metal'), wood: toon('wood'), dark: toon('dark'),
     gold: toon('gold'), red: toon('red'), sky: toon('sky'),
     shoe: toon({ l: '#6a5444', m: '#47372c', d: '#261c16' }),
@@ -422,7 +422,7 @@ function buildHand(s) {
 
   const thumb = mk('thumb');
   fistBall(thumb);
-  add(thumb, cap(0.046, 0.1, 8), m.skin, [-s * 0.01, -0.07, 0.15], [Math.PI / 2, 0, 0]);
+  add(thumb, cap(0.054, 0.12, 8), m.skin, [-s * 0.01, -0.07, 0.17], [Math.PI / 2, 0, 0]);
 
   const point = mk('point');
   fistBall(point);
@@ -646,7 +646,9 @@ function resolveProp(kind, sp) {
     const q = new QT().setFromUnitVectors(new V3(0, 1, 0), d).multiply(new QT().setFromAxisAngle(new V3(0, 1, 0), (sp.roll || 0) * DEG));
     return { node: sp.in || 'base', p: new V3(...sp.at), q };
   }
-  return { node: sp.in || 'torso', p: new V3(...(sp.p || [0, 0, 0])), q: eulerQ(...(sp.r || [0, 0, 0])) };
+  const q = eulerQ(...(sp.r || [0, 0, 0]));
+  if (sp.aa) q.multiply(new QT().setFromAxisAngle(new V3(sp.aa[0], sp.aa[1], sp.aa[2]).normalize(), sp.aa[3] * DEG));
+  return { node: sp.in || 'torso', p: new V3(...(sp.p || [0, 0, 0])), q };
 }
 
 function solve(sp) {
@@ -985,13 +987,14 @@ export const POSE_SPECS = {
     const d = 0.5 + 0.5 * Math.sin(t * T2 * 0.5);
     const pray = { atT: [0.06, 0.42, 0.36], pole: [1, -0.5, -0.4], hand: 'flat', hf: [0, 0.9, 0.35], hp: [-1, 0, 0] };
     const spec = {
-      hip: { rx: 8 + 4 * d, z: -0.03 }, torso: { rx: 6 + 4 * d }, head: { rx: -20 + 2 * d },
+      hip: { rx: 8 + 4 * d, z: -0.03 }, torso: { rx: 6 + 4 * d }, head: { rx: -27 + 2 * d },
       L: pray, R: pray, face: 'smile',
     };
-    if (v.hat) {
-      spec.hat = { in: 'torso', p: [0, 0.4, 0.52], r: [-80, 0, 0] };
-      spec.L = { atT: [0.36, 0.38, 0.46], pole: [1, -0.5, -0.4], hand: 'fist', hf: [-1, 0, 0.2], ha: [0, 1, 0] };
+    if (v.hat) {   // hard hat off and held to his chest, a bow of respect
+      spec.hat = { in: 'torso', p: [0, 0.4, 0.44], r: [-30, 0, 0], aa: [0, 1, 1, 180] };
+      spec.L = { atT: [0.5, 0.42, 0.5], pole: [1, -0.5, -0.4], hand: 'fist', hf: [-1, 0, 0.25], ha: [0, 0.5, 0.85] };
       spec.R = spec.L;
+      spec.head = { rx: 2 + 6 * d };
     }
     return spec;
   },
@@ -1010,11 +1013,11 @@ export const POSE_SPECS = {
     // a dig cycle: push in, lever back, lift and toss
     const P = 1.5, u = (t % P) / P;
     const k = [
-      [0.0, { at: [-0.42, 0.3, 0.66], dir: [0.25, 0.85, -0.46], lean: 20 }],
-      [0.35, { at: [-0.42, 0.04, 0.68], dir: [0.25, 0.88, -0.42], lean: 28 }],
-      [0.55, { at: [-0.42, 0.06, 0.64], dir: [0.25, 0.7, -0.66], lean: 24 }],
-      [0.8, { at: [-0.62, 0.45, 0.5], dir: [0.5, 0.7, -0.5], lean: 12 }],
-      [1.0, { at: [-0.42, 0.3, 0.66], dir: [0.25, 0.85, -0.46], lean: 20 }],
+      [0.0, { at: [-0.75, 0.3, 0.85], dir: [0.6, 0.7, -0.4], lean: 18 }],
+      [0.35, { at: [-0.75, 0.03, 0.88], dir: [0.58, 0.74, -0.36], lean: 26 }],
+      [0.55, { at: [-0.72, 0.06, 0.85], dir: [0.6, 0.58, -0.55], lean: 22 }],
+      [0.8, { at: [-0.88, 0.5, 0.62], dir: [0.75, 0.55, -0.36], lean: 12 }],
+      [1.0, { at: [-0.75, 0.3, 0.85], dir: [0.6, 0.7, -0.4], lean: 18 }],
     ];
     let i = 0;
     while (u > k[i + 1][0]) i++;
@@ -1025,9 +1028,9 @@ export const POSE_SPECS = {
     return {
       shovel: { in: 'base', at: mix(A.at, B.at), dir: mix(A.dir, B.dir), roll: 0 },
       hammer: 'back',
-      hip: { y: -0.08, rx: lean * 0.45 }, torso: { rx: lean * 0.55, ry: -6 }, head: { rx: -lean - 16 },
+      hip: { y: -0.08, rx: lean * 0.45 }, torso: { rx: lean * 0.55, ry: -14 }, head: { rx: -lean - 16, ry: -6 },
       legL: { a: 14, b: 6, k: 18 }, legR: { a: -12, b: 6, k: 10 },
-      R: { grab: 0.85, pole: [1, -0.6, -0.3] }, L: { grab: 1.25, pole: [1, -0.2, -0.6] },
+      R: { grab: 1.0, pole: [1, -0.6, -0.3] }, L: { grab: 1.28, pole: [1, -0.2, -0.6] },
       face: 'go',
     };
   },

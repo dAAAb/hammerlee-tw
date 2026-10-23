@@ -11,7 +11,8 @@ import { createChuan, heartGeometry, starGeometry } from './chuan.js';
 import { slabFromShape, roundRect } from '../chat/shapes.js';
 
 const FIG_Z = -0.95;          // where he stands
-const BASE_R = 1.32, BASE_H = 0.16;
+const BASE_R = 1.42, BASE_H = 0.16;
+const FIG_S = 1.18;          // the figure a bit bigger than in the chat so poses read
 const PLATE_Z = 1.42, PLATE_D = 1.42, PLATE_H = 0.26, PLATE_MAX_W = 5.3;
 const TEXT_TOP = '#10306e';
 
@@ -85,6 +86,7 @@ export function createChuanSticker(id, font) {
   top.receiveShadow = true;
   const chuan = createChuan({ hat: true, tools: look.tools ?? false });
   chuan.group.position.y = BASE_H + 0.02;
+  chuan.group.scale.setScalar(FIG_S);
   chuan.setPose(def.pose, 1, look.v || {});
   stand.add(chuan.group);
 
@@ -137,11 +139,14 @@ export function createChuanSticker(id, font) {
   }
   if (extras.includes('dirt')) {
     const dirt = toon('#a0703f');
-    mesh(g.mound, dirt, stand, [0.25, 0.14, 0.95], null, [0.55, 0.26, 0.42]);
-    const clods = [[0.85, 0.2, 0.8], [-0.15, 0.2, 1.05], [0.6, 0.2, 1.25]].map(p => mesh(g.dot, dirt, stand, p, null, 0.07));
+    // a little heap of earth where the blade bites, and a clod flying off with each toss
+    mesh(g.mound, dirt, stand, [-0.95, BASE_H, 0.95], null, [0.5, 0.26, 0.42]);
+    for (const p of [[-0.45, 0.2, 1.15], [-1.3, 0.2, 0.55]]) mesh(g.dot, dirt, stand, p, null, 0.07);
+    const clod = mesh(g.dot, dirt, stand, [0, 0, 0], null, 0.085);
     fx.push((t) => {
-      const u = ((t / 1.5) % 1);
-      clods[0].position.set(0.6 + u * 0.9, 0.22 + Math.max(0, Math.sin(Math.PI * Math.min(1, Math.max(0, (u - 0.75) / 0.25)))) * 0.6, 0.6);
+      const u = (t / 1.5) % 1, k = Math.min(1, Math.max(0, (u - 0.72) / 0.28));
+      clod.visible = k > 0 && k < 1;
+      clod.position.set(-1.05 - 0.6 * k, 0.75 + 0.9 * Math.sin(Math.PI * k) - 0.5 * k, 0.6 + 0.3 * k);
     });
   }
   if (extras.includes('dust')) {

@@ -32,7 +32,7 @@ document.head.append(style);
 const q = new URLSearchParams(location.search);
 const stage = new Stage(document.getElementById('stage'));
 const [font, photoAspect] = await Promise.all([
-  GlyphFont.load('glyphs.bin'),
+  GlyphFont.load('glyphs.txt'),
   fetch('photos/index.json').then(r => r.json()).catch(() => ({})),
 ]);
 ensureEnvironment(stage.renderer, stage.scene);

@@ -23,19 +23,19 @@ function bust(parent) {
   const shirt = toon('shirt'), white = toon('white'), skin = toon('skin');
   const b = new THREE.Group();
   parent.add(b);
-  mesh(once('shoulders', () => new THREE.SphereGeometry(1, 24, 14, 0, Math.PI * 2, 0, Math.PI / 2).scale(0.74, 0.4, 0.5)), shirt, b);
+  mesh(once('shoulders', () => new THREE.SphereGeometry(1, 24, 14, 0, Math.PI * 2, 0, Math.PI / 2).scale(0.82, 0.42, 0.55)), shirt, b);
   mesh(once('neck', () => new THREE.CylinderGeometry(0.15, 0.17, 0.2, 14)), skin, b, [0, 0.38, 0.04]);
   const flap = once('flap', () => {
     const s = new THREE.Shape();
-    s.moveTo(0, 0); s.lineTo(0.22, 0.02); s.lineTo(0.07, -0.17); s.lineTo(0, 0);
+    s.moveTo(0, 0); s.lineTo(0.3, 0.03); s.lineTo(0.09, -0.24); s.lineTo(0, 0);
     return new THREE.ExtrudeGeometry(s, { depth: 0.035, bevelEnabled: true, bevelThickness: 0.01, bevelSize: 0.008, bevelSegments: 1, curveSegments: 1 });
   });
   for (const sd of [1, -1]) {
-    const f = mesh(flap, white, b, [sd * 0.03, 0.37, 0.17], [-0.95, 0, 0]);
+    const f = mesh(flap, white, b, [sd * 0.03, 0.36, 0.22], [-0.85, 0, 0]);
     if (sd < 0) f.scale.x = -1;
     f.rotateZ(-sd * 0.25);
   }
-  mesh(once('btn', () => new THREE.SphereGeometry(0.03, 8, 6)), white, b, [0, 0.25, 0.43]);
+  mesh(once('btn', () => new THREE.SphereGeometry(0.035, 8, 6)), white, b, [0, 0.22, 0.44]);
   return b;
 }
 
@@ -48,14 +48,14 @@ export function createChuanAvatar() {
   face.receiveShadow = true;
 
   const fig = new THREE.Group();
-  fig.position.set(0.06, 0.25, 0.16);
+  fig.position.set(0.06, 0.25, 0.26);
   g.add(fig);
   bust(fig);
   const head = createHead();
   head.setFace('grin');
   const hs = 0.86;
   head.group.scale.setScalar(hs);
-  head.group.position.set(0, 0.79, 0.06);
+  head.group.position.set(0, 0.79, -0.02);
   head.group.rotation.x = -24 * DEG;
   fig.add(head.group);
 

@@ -32,7 +32,7 @@ if (show === 'poses') {
     const x = (i % cols - (cols - 1) / 2) * dx, z = Math.floor(i / cols) * dz;
     c.group.position.set(x, 0, z);
     const v = params.get('face') ? { face: params.get('face') } : {};
-    if (EXPRESSIONS.includes(name)) { c.setPose('idle'); c.setFace(name); }
+    if (name.startsWith('face:')) { c.setPose('idle'); c.setFace(name.slice(5)); }
     else c.setPose(name, 1, v);
     B.add(c.group);
     B.label(name, x, z + 1.75, 0.5);

@@ -3,9 +3,17 @@
 import * as THREE from 'three';
 
 export class GlyphFont {
+  // url may point at the raw file or at a base64 text copy (*.txt) for hosts that only serve web types
   static async load(url) {
-    const buf = await (await fetch(url)).arrayBuffer();
-    return new GlyphFont(buf);
+    const res = await fetch(url);
+    if (!res.ok) throw new Error(`${url}: ${res.status}`);
+    if (url.endsWith('.txt')) {
+      const bin = atob((await res.text()).trim());
+      const buf = new Uint8Array(bin.length);
+      for (let i = 0; i < bin.length; i++) buf[i] = bin.charCodeAt(i);
+      return new GlyphFont(buf.buffer);
+    }
+    return new GlyphFont(await res.arrayBuffer());
   }
   constructor(buf) {
     const dv = new DataView(buf);
