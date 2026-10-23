@@ -97,13 +97,17 @@ export class GlyphFont {
 
   // One merged geometry for many placed glyphs: items = [{ ch, x, z, size, depth }] (x/z = pen position at
   // the baseline, in world em). Returns null when nothing is drawable.
-  build(items) {
+  // With withIndex, a per-vertex attribute `gi` holds each item's `order` (or its index) so a shader can
+  // reveal letters one by one.
+  build(items, { withIndex = false } = {}) {
     let n = 0;
     const gs = items.map(it => { const g = this.glyph(it.ch); n += g.pos.length; return g; });
     if (!n) return null;
     const pos = new Float32Array(n), nrm = new Float32Array(n);
+    const gi = withIndex ? new Float32Array(n / 3) : null;
     let o = 0;
     items.forEach((it, i) => {
+      if (gi) gi.fill(it.order ?? i, o / 3, (o + gs[i].pos.length) / 3);
       const g = gs[i], s = it.size, d = it.depth, y0 = it.y || 0;
       const P = g.pos, N = g.nrm;
       for (let j = 0; j < P.length; j += 3) {
@@ -117,6 +121,7 @@ export class GlyphFont {
     const geo = new THREE.BufferGeometry();
     geo.setAttribute('position', new THREE.BufferAttribute(pos, 3));
     geo.setAttribute('normal', new THREE.BufferAttribute(nrm, 3));
+    if (gi) geo.setAttribute('gi', new THREE.BufferAttribute(gi, 1));
     geo.computeBoundingSphere();
     return geo;
   }

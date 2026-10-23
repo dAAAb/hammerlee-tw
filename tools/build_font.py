@@ -1,6 +1,8 @@
 """Turn a TTF + charset into a compact glyph-outline file for 3D extrusion at runtime.
 
-Usage: python3 -I tools/build_font.py FONT.ttf CHARSET.txt OUT.bin
+Usage: python3 -I tools/build_font.py FONT.ttf[,FALLBACK.ttf...] CHARSET.txt OUT.bin
+A character missing from the first font is taken from the next one that has it; if none has it the build
+fails, so a sentence can never lose a letter.
 
 Format (little endian):
   header : b'HLG1', u16 unitsPerEm, i16 ascender, i16 descender, u32 glyphCount
@@ -161,29 +163,36 @@ def enc_contour(c):
     return out
 
 
-def main(font_path, charset_path, out_path):
-    font = TTFont(font_path)
-    cmap = font.getBestCmap()
-    gs = font.getGlyphSet()
-    hmtx = font["hmtx"]
+def main(font_paths, charset_path, out_path):
+    fonts = []
+    for path in font_paths.split(","):
+        f = TTFont(path)
+        fonts.append((f, f.getBestCmap(), f.getGlyphSet(), f["hmtx"], f["head"].unitsPerEm))
+    font, _, _, _, upm = fonts[0]
     chars = sorted(set(open(charset_path, encoding="utf-8").read()) - set("\n\r\t"))
-    missing = [ch for ch in chars if ord(ch) not in cmap and ch != " "]
-    entries = []
+    entries, missing, borrowed = [], [], []
     for ch in chars:
         cp = ord(ch)
-        if cp not in cmap:
+        src = next((fo for fo in fonts if cp in fo[1]), None)
+        if src is None:
+            if ch != " ":
+                missing.append(ch)
             continue
+        _, cmap, gs, hmtx, fupm = src
         name = cmap[cp]
         pen = FlattenPen(gs)
         gs[name].draw(pen)
-        shapes = shapes_of(pen.contours)
+        k = upm / fupm
+        contours = [[(x * k, y * k) for x, y in c] for c in pen.contours]
+        shapes = shapes_of(contours)
         data = bytearray(struct.pack("<H", len(shapes)))
         for shape in shapes:
             data += struct.pack("<H", len(shape))
             for c in shape:
                 data += enc_contour(c)
-        entries.append((cp, hmtx[name][0], bytes(data)))
-    upm = font["head"].unitsPerEm
+        entries.append((cp, round(hmtx[name][0] * k), bytes(data)))
+        if src is not fonts[0]:
+            borrowed.append(ch)
     hh = font["hhea"]
     head = b"HLG1" + struct.pack("<HhhI", upm, hh.ascent, hh.descent, len(entries))
     index_size = len(entries) * 14
@@ -195,8 +204,11 @@ def main(font_path, charset_path, out_path):
     with open(out_path, "wb") as f:
         f.write(head + index + blob)
     print(f"{len(entries)} glyphs, {len(head) + len(index) + len(blob)} bytes -> {out_path}")
+    if borrowed:
+        print("from fallback font:", "".join(borrowed))
     if missing:
-        print("MISSING:", "".join(missing))
+        print("MISSING in every font:", "".join(missing))
+        sys.exit(1)
 
 
 if __name__ == "__main__":

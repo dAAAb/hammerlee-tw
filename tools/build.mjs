@@ -4,6 +4,7 @@
 // Static files in public/ (glyphs.bin, photos) are copied next to them and fetched by relative URL.
 import * as esbuild from 'esbuild';
 import { readFileSync, writeFileSync, mkdirSync, cpSync, existsSync } from 'node:fs';
+import { execFileSync } from 'node:child_process';
 
 const argv = process.argv.slice(2);
 const arg = (name, dflt) => { const i = argv.indexOf(name); return i >= 0 ? argv[i + 1] : dflt; };
@@ -28,8 +29,22 @@ function page(js) {
   return shell.replace('/*APP*/', () => safe);
 }
 
+// Keep public/glyphs.bin in step with every character in src/ (so no sentence can lose a letter).
+let lastCharset = '';
+function syncFont() {
+  const charset = execFileSync('node', ['tools/charset.mjs'], { encoding: 'utf8' });
+  if (charset === lastCharset && existsSync('public/glyphs.bin')) return;
+  mkdirSync('build', { recursive: true });
+  writeFileSync('build/charset.txt', charset);
+  const fonts = ['assets/fonts/Huninn-Regular.ttf', 'assets/fonts/ChironGoRoundTC-Regular.ttf'].filter(existsSync).join(',');
+  if (!fonts) { console.warn('fonts missing: run tools/fetch_fonts.sh'); return; }
+  process.stdout.write(execFileSync('python3', ['-I', 'tools/build_font.py', fonts, 'build/charset.txt', 'public/glyphs.bin'], { encoding: 'utf8' }));
+  lastCharset = charset;
+}
+
 async function once() {
   const t = Date.now();
+  syncFont();
   const js = await bundle();
   const frag = page(js);
   const full = `<!doctype html><html lang="zh-Hant"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover"></head><body>${frag}</body></html>`;

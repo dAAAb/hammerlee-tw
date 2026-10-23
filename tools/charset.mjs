@@ -21,9 +21,8 @@ walk('src');
 const keep = [...chars].filter(c => {
   const cp = c.codePointAt(0);
   if (cp < 32) return false;
-  if (cp >= 0x1f000) return false;                 // real emoji are drawn as 3D models, never from the font
-  if (cp >= 0x2600 && cp <= 0x27bf) return false;   // dingbats/symbols likewise
-  if (cp === 0xfe0f || cp === 0x20e3) return false;
+  if (/\p{Extended_Pictographic}/u.test(c) && c !== '▶') return false;   // real emoji are 3D models, never letters
+  if (cp >= 0x1f000 || cp === 0xfe0f || cp === 0x20e3 || cp === 0x200d) return false;
   return true;
 });
 process.stdout.write(keep.sort().join(''));

@@ -44,10 +44,21 @@ const vert = /* glsl */`
 #include <shadowmap_pars_vertex>
 varying vec3 vWN;
 varying vec3 vObjN;
+#ifdef USE_REVEAL
+attribute float gi;
+uniform float uReveal;
+uniform float uDrop;
+#endif
 void main() {
   #include <beginnormal_vertex>
   #include <defaultnormal_vertex>
   #include <begin_vertex>
+  #ifdef USE_REVEAL
+    // letters rain down onto the bubble one after another; not-yet-revealed ones hide under the floor
+    float rv = clamp(uReveal - gi, 0.0, 1.0);
+    if (rv <= 0.0) transformed.y -= 1000.0;
+    else transformed.y += (1.0 - rv) * (1.0 - rv) * uDrop;
+  #endif
   #include <project_vertex>
   #include <worldpos_vertex>
   #include <shadowmap_vertex>
@@ -92,6 +103,18 @@ void main() {
 }`;
 
 const cache = new Map();
+
+// A private copy of a toon material that reveals letters by their `gi` attribute (see font.build withIndex).
+// Set mat.uniforms.uReveal.value = number of letters shown (fractional = the next one is landing).
+export function toonReveal(pal, opts = {}) {
+  const base = toon(pal, opts);
+  const m = base.clone();
+  m.uniforms = THREE.UniformsUtils.clone(base.uniforms);
+  m.uniforms.uReveal = { value: 0 };
+  m.uniforms.uDrop = { value: opts.drop ?? 1.6 };
+  m.defines = { ...(m.defines || {}), USE_REVEAL: '' };
+  return m;
+}
 
 // toon(pal, opts): shared material per palette+options. opts: { receive: 0..1 shadow strength, top: '#hex', opacity }
 export function toon(pal, opts = {}) {

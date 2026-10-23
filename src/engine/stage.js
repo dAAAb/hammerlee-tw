@@ -118,6 +118,7 @@ export class Stage {
     this.rt = null;
 
     this.emPx = 22;          // CSS pixels per em (set by layout)
+    this.zoom = 1;           // < 1 zooms in (used by the intro)
     this.viewW = 17;         // visible width in em
     this.viewH = 30;
     this.dirty = true;
@@ -185,6 +186,8 @@ export class Stage {
     c.up.set(-Math.sin(y), 0, -Math.cos(y));   // "away from the viewer" is screen-up, at every pitch
     c.lookAt(target);
     c.focusDist = dist;
+    const z = this.zoom;
+    c.left = -this.viewW / 2 * z; c.right = this.viewW / 2 * z; c.top = this.viewH / 2 * z; c.bottom = -this.viewH / 2 * z;
     c.shear.copy(shear);
     c.updateProjectionMatrix();
     c.updateMatrixWorld();
@@ -220,10 +223,19 @@ export class Stage {
     r.setRenderTarget(rt); r.clear(); r.render(scene, camera);
     let src = rt;
     if (ink) {
-      const u = this.ink.uniforms, keep = { c: u.tColor.value, d: u.tDepth.value, t: u.texel.value.clone(), w: u.inkW.value };
-      u.tColor.value = rt.texture; u.tDepth.value = depth; u.texel.value.set(1 / w, 1 / h); u.inkW.value = Math.max(1.6, w / 600);
+      const u = this.ink.uniforms;
+      const keep = { c: u.tColor.value, d: u.tDepth.value, t: u.texel.value.clone(), w: u.inkW.value, n: u.near.value, f: u.far.value, s: u.silT.value, k: u.creaseT.value };
+      // ink thresholds for this camera: world units covered by one output pixel, and how steep walls look
+      const wpp = (camera.right - camera.left) / w;
+      const steep = camera.shear ? Math.max(0.2, camera.shear.y || 0.6) : 0.6;
+      const inkW = Math.max(1.6, w / 560);
+      u.tColor.value = rt.texture; u.tDepth.value = depth; u.texel.value.set(1 / w, 1 / h); u.inkW.value = inkW;
+      u.near.value = camera.near; u.far.value = camera.far;
+      u.silT.value = Math.max(0.05, 2.6 * (wpp / steep) * inkW);
+      u.creaseT.value = Math.max(0.006, 0.55 * (wpp / steep) * inkW);
       r.setRenderTarget(out); r.render(this.postScene, this.postCam);
       u.tColor.value = keep.c; u.tDepth.value = keep.d; u.texel.value.copy(keep.t); u.inkW.value = keep.w;
+      u.near.value = keep.n; u.far.value = keep.f; u.silT.value = keep.s; u.creaseT.value = keep.k;
       src = out;
     }
     const buf = new Uint8Array(w * h * 4);
