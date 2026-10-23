@@ -66,6 +66,7 @@ const app = new App({
   stage, font, chat, ...builderOpts,
   hooks: {
     skipIntro: q.has('nointro') || matchMedia('(prefers-reduced-motion: reduce)').matches,
+    replay,
     tap: onTap,
     share: openShare,
     reveal(it) {

@@ -54,7 +54,7 @@ export function layoutChat(chat, font, opts) {
 
     switch (msg.kind) {
       case 'date': {
-        it.text = `今天 ${clockLabel(clock)}`;
+        it.text = opts.replay ? '朋友分享給你的對話' : `今天 ${clockLabel(clock)}`;
         it.w = font.measure(it.text, 0.62) + 1.4; it.h = 1.25; it.x = -it.w / 2;
         break;
       }

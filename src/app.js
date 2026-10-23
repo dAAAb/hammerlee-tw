@@ -72,7 +72,7 @@ export class App {
     if (!soft) {
       for (const [i, rec] of this.records) this.dropRecord(i, rec);
       this.hooks.relayout?.();
-      this.layout = layoutChat(this.chat, this.font, { viewW: st.viewW, photoAspect: this.builder.photoAspect, start: this.hooks.start || new Date(), cover: true });
+      this.layout = layoutChat(this.chat, this.font, { viewW: st.viewW, photoAspect: this.builder.photoAspect, start: this.hooks.start || new Date(), cover: true, replay: !!this.hooks.replay });
     }
     // selectable text only inside the chat area, never under the header or the input bar
     const hp = this.chrome.headerH * unit * st.emPx, bp = (this.chrome.barH + 0.6) * unit * st.emPx;
