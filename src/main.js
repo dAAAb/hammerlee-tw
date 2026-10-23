@@ -19,6 +19,8 @@ import { burst } from './fx/confetti.js';
 import { Runner } from './fx/runner.js';
 import { play, setFeel, soundFor, canVibrate } from './fx/feel.js';
 import { Tilt } from './fx/tilt.js';
+import { SideScenery } from './fx/scenery-side.js';
+import { createScenery } from './models/scenery.js';
 import { registerModels } from './models/registry.js';
 import { makeEmoji } from './models/emoji.js';
 import { createMeSticker } from './models/stickers-me.js';
@@ -65,6 +67,7 @@ const builderOpts = { photoAspect, loadPhoto, makeElder: id => elderTexture(font
 
 let confetti = null;
 let runner = null;
+let scenery = null;
 
 // viewer settings, remembered on this device only
 const SETTINGS_KEY = 'hl:settings';
@@ -93,13 +96,15 @@ const app = new App({
     tap: onTap,
     share: openShare,
     reveal(it) {
+      scenery?.reveal(it);
       if (it.kind === 'badge') confetti = burst(stage.scene, new THREE.Vector3(0, 0, it.z + it.h / 2), matchMedia('(prefers-reduced-motion: reduce)').matches ? 24 : 90);
     },
     ended() {
       recordChat({ id: chat.id, serial, topics: chat.topics, script: SCRIPT_VERSION });
       try { localStorage.setItem('hl:mine', chat.id); } catch (e) { /* private mode */ }
     },
-    frame(dt) { if (confetti && !confetti.update(dt)) confetti = null; runner?.update(dt); },
+    frame(dt) { if (confetti && !confetti.update(dt)) confetti = null; runner?.update(dt); scenery?.update(dt); },
+    relayout() { scenery?.reset(); },
     topic() { runner?.topic(); },
     avatarTap() { runner?.summon(); },
     tapExtra(rc) { return runner?.hit(rc) || false; },
@@ -111,6 +116,7 @@ const app = new App({
 });
 const calm = matchMedia('(prefers-reduced-motion: reduce)').matches;
 runner = q.has('norunner') ? null : new Runner(app, createChuan, { calm, sfx: play });
+scenery = new SideScenery(app, createScenery);
 if (q.has('debug')) window.__runner = runner;
 window.__app = app;
 if (q.has('at')) app.jumpTo(+q.get('at'));
