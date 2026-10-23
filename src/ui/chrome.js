@@ -74,7 +74,11 @@ export class Chrome {
     bs.position.set(-W / 2, -0.7, 0);
     bar.add(bs);
     this.sendW = 2.7;
-    this.fieldX = -viewW / 2 + 0.55;
+    this.gearD = 2.5;
+    this.gear = this.gearButton(this.gearD);
+    this.gear.position.set(-viewW / 2 + 0.5 + this.gearD / 2, 0.05, BAR_H / 2);
+    bar.add(this.gear);
+    this.fieldX = -viewW / 2 + 0.5 + this.gearD + 0.35;
     this.fieldW = this.fieldWidth();
     this.field = new THREE.Group();
     bar.add(this.field);
@@ -181,7 +185,29 @@ export class Chrome {
     return g;
   }
 
-  fieldWidth() { return this.viewW - 1.1 - this.sendW - 0.4 - (this.mode === 'share' ? 1.6 : 0); }
+  fieldWidth() { return this.viewW - 1.1 - this.sendW - 0.4 - this.gearD - 0.35 - (this.mode === 'share' ? 1.6 : 0); }
+
+  // a chunky cog: a toothed disc with a hole, the universal "settings" sign
+  gearButton(d) {
+    const g = new THREE.Group();
+    const disc = new THREE.Mesh(slabFromShape(circleShape(d / 2), 0.5, { bevel: 0.08 }), toon('white'));
+    disc.userData.own = true;
+    g.add(disc);
+    const s = new THREE.Shape();
+    const teeth = 8, r0 = 0.62, r1 = 0.86;
+    for (let i = 0; i < teeth * 4; i++) {
+      const a = i / (teeth * 4) * Math.PI * 2, r = (i % 4 < 2) ? r1 : r0;
+      if (i === 0) s.moveTo(Math.cos(a) * r, Math.sin(a) * r); else s.lineTo(Math.cos(a) * r, Math.sin(a) * r);
+    }
+    s.closePath();
+    s.holes.push(new THREE.Path().absarc(0, 0, 0.3, 0, Math.PI * 2, true));
+    const cog = new THREE.Mesh(slabFromShape(s, 0.22, { bevel: 0.03 }), toon('navy'));
+    cog.userData.own = true;
+    cog.position.y = 0.5;
+    g.add(cog);
+    g.userData.cog = cog;
+    return g;
+  }
 
   buildField(lines) {
     for (const c of [...this.field.children]) { this.field.remove(c); if (c.userData.own) c.geometry.dispose(); }
@@ -260,6 +286,7 @@ export class Chrome {
     const sendCx = vw / 2 - 0.55 - this.sendW / 2, sendCy = bottom + BAR_H / 2;
     if (this.mode === 'share') rects.push({ id: 'share', label: '分享這段對話給朋友', ...rect(px(sendCx - this.sendW / 2 - 1.6, sendCy + this.sendW * 0.39), (this.sendW + 1.6) * em, this.sendW * 0.78 * em) });
     else rects.push({ id: 'send', label: '下一則', ...rect(px(sendCx - this.sendW / 2, sendCy + this.sendW / 2), this.sendW * em, this.sendW * em) });
+    rects.push({ id: 'settings', label: '設定與說明（聲音、震動、立體視角）', ...rect(px(-vw / 2 + 0.5, bottom + BAR_H / 2 + this.gearD / 2), this.gearD * em, this.gearD * em) });
     rects.push({ id: 'field', label: this.mode === 'share' ? '分享這段對話給朋友' : '下一則', ...rect(px(this.fieldX, bottom + BAR_H / 2 - 0.95 + this.fieldH), this.fieldW * em, this.fieldH * em) });
     if (this.flags.bye && !this.flags.ended) rects.push({ id: 'bye', label: '跟川伯說掰掰（直接看到最後）', ...rect(px(-vw / 2 + 0.55, bottom + BAR_H + this.fieldExtra() + 2.35), 6.7 * em, 1.85 * em) });
     if (this.flags.behind) rects.push({ id: 'down', label: '回到最新訊息', ...rect(px(vw / 2 - 0.55 - 2.3, bottom + BAR_H + this.fieldExtra() + 1.75 + 1.15), 2.3 * em, 2.3 * em) });
@@ -297,6 +324,7 @@ export class Chrome {
     this.sendBtn.scale.set(s, 1, s);   // (inside the bar, which carries the unit scale)
     if (this.mode === 'share') this.sendBtn.userData.share.position.y = Math.abs(Math.sin(t * 3)) * 0.25;
     for (const e of this.typing.emojis) e.userData.tick?.(t);
+    if (this.gear) this.gear.userData.cog.rotation.y = t * 0.25;
     this.autoBtn.group.position.y = 0.1 + (this.flags.auto ? Math.abs(Math.sin(t * 4)) * 0.15 : 0);
   }
 

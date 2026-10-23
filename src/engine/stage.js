@@ -43,6 +43,7 @@ uniform float creaseT;
 uniform vec3 inkColor;
 uniform float grain;
 uniform float seed;
+uniform float hand;
 varying vec2 vUv;
 float hash(vec2 p){ p = fract(p * vec2(123.34, 456.21)); p += dot(p, p + 45.32); return fract(p.x * p.y); }
 float vnoise(vec2 p){ vec2 i = floor(p), f = fract(p); f = f*f*(3.0-2.0*f);
@@ -52,8 +53,8 @@ void main(){
   vec2 px = vUv / texel;
   // hand-drawn wobble: the ink is looked up through a slow, slightly lumpy displacement
   vec2 wob = vec2(vnoise(px * 0.045 + seed), vnoise(px * 0.045 + seed + 17.0)) - 0.5;
-  vec2 uv = vUv + wob * texel * 1.6;
-  float w = inkW * (0.85 + 0.35 * vnoise(px * 0.02 + seed * 3.0));
+  vec2 uv = vUv + wob * texel * 1.6 * hand;
+  float w = inkW * (0.85 + 0.15 * (1.0 - min(hand, 1.0)) + 0.35 * hand * (vnoise(px * 0.02 + seed * 3.0) - 0.5) + 0.175 * hand);
   vec2 ox = vec2(texel.x * w, 0.0), oy = vec2(0.0, texel.y * w);
   float d0 = lin(uv);
   float dl = lin(uv - ox), dr = lin(uv + ox), dd = lin(uv - oy), du = lin(uv + oy);
@@ -73,7 +74,7 @@ void main(){
   c = mix(c, inkColor, clamp(e, 0.0, 1.0) * 0.92);
   // paper tooth
   float g = vnoise(px * 0.9) * 0.6 + hash(floor(px * 0.5) + seed) * 0.4;
-  c *= 1.0 - grain * (g - 0.5);
+  c *= 1.0 - grain * hand * (g - 0.5);
   gl_FragColor = vec4(c, 1.0);
 }`;
 
@@ -106,7 +107,7 @@ export class Stage {
         tColor: { value: null }, tDepth: { value: null }, texel: { value: new THREE.Vector2() },
         near: { value: this.camera.near }, far: { value: this.camera.far }, inkW: { value: 1.4 },
         silT: { value: 0.06 }, creaseT: { value: 0.02 }, inkColor: { value: new THREE.Color(INK) },
-        grain: { value: 0.07 }, seed: { value: Math.random() * 100 },
+        grain: { value: 0.07 }, seed: { value: Math.random() * 100 }, hand: { value: 1 },
       },
       vertexShader: inkVert, fragmentShader: inkFrag, depthTest: false, depthWrite: false,
     });

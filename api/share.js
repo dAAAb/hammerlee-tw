@@ -3,9 +3,12 @@
 // page uploaded to Supabase Storage when it was shared; until it exists, the campaign's default picture.
 export const config = { runtime: 'edge' };
 
-const SITE = process.env.PUBLIC_URL || 'https://example.com/';
-const SUPABASE_URL = process.env.SUPABASE_URL || '';
-const SUPABASE_ANON_KEY = process.env.SUPABASE_ANON_KEY || '';
+import { CONFIG } from '../src/config.js';
+
+// the anon key is public by design (row-level security guards the table); env vars can override for staging
+const SITE = process.env.PUBLIC_URL || CONFIG.publicUrl;
+const SUPABASE_URL = process.env.SUPABASE_URL || CONFIG.supabaseUrl;
+const SUPABASE_ANON_KEY = process.env.SUPABASE_ANON_KEY || CONFIG.supabaseAnonKey;
 const FALLBACK_IMAGE = process.env.FALLBACK_OG || `${SITE}og-default.png`;
 
 const esc = s => String(s).replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));

@@ -3,7 +3,7 @@
 // picture of the whole conversation.
 import * as THREE from 'three';
 import { ObliqueCamera } from '../engine/stage.js';
-import { floorMaterial } from '../engine/toon.js';
+import { floorMaterial, forgetFloor } from '../engine/toon.js';
 
 const corners = b => {
   const out = [];
@@ -75,7 +75,7 @@ export function isolatedScene(stage, { floor = ['#a9c6ea', '#9fbfe6'], env = tru
       sun.target.updateMatrixWorld();
       f.position.set(c.x, 0, c.z);
     },
-    dispose() { f.geometry.dispose(); sun.dispose?.(); },
+    dispose() { f.geometry.dispose(); forgetFloor(f.material); sun.shadow.map?.dispose(); sun.dispose?.(); },
   };
 }
 

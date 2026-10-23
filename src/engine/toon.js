@@ -141,8 +141,20 @@ export function toon(pal, opts = {}) {
     side: opts.side === 2 ? THREE.DoubleSide : THREE.FrontSide,
   });
   mat.userData.pal = pal;
+  mat.userData.receive = opts.receive ?? 0;
+  mat.uniforms.uShadowK.value = mat.userData.receive * look.shadow;
   cache.set(key, mat);
   return mat;
+}
+
+// How strong cast shadows are everywhere (1 = the designed look). Floors register themselves too.
+export const look = { shadow: 1 };
+const floors = new Set();
+export function forgetFloor(m) { floors.delete(m); m.dispose(); }
+export function setShadowStrength(k) {
+  look.shadow = k;
+  for (const m of cache.values()) m.uniforms.uShadowK.value = (m.userData.receive || 0) * k;
+  for (const f of floors) f.uniforms.uShadowK.value = f.userData.base * k;
 }
 
 // A palette from one hex: lighter top, the colour itself as mid, a deep warm-shifted shade.
@@ -160,12 +172,12 @@ export function mixHex(a, b, t) {
 
 // Floor material: flat colour + a faint printed pattern + flat blue cast shadows.
 export function floorMaterial(base = '#a9c6ea', pattern = '#9fbfe6') {
-  return new THREE.ShaderMaterial({
+  const mat = new THREE.ShaderMaterial({
     uniforms: THREE.UniformsUtils.merge([THREE.UniformsLib.lights, {
       cBase: { value: new THREE.Color(base) },
       cPat: { value: new THREE.Color(pattern) },
       cS: { value: new THREE.Color(SHADOW) },
-      uShadowK: { value: 0.62 },
+      uShadowK: { value: 0.62 * look.shadow },
     }]),
     vertexShader: /* glsl */`
       #include <common>
@@ -209,6 +221,9 @@ export function floorMaterial(base = '#a9c6ea', pattern = '#9fbfe6') {
       }`,
     lights: true,
   });
+  mat.userData.base = 0.62;
+  floors.add(mat);
+  return mat;
 }
 
 // Physically-lit material for the shiny badge (reflections need an env map set on the scene).

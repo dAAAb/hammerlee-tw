@@ -28,8 +28,9 @@ create or replace function public.chat_count() returns bigint
 language sql stable security definer set search_path = public as $$ select count(*) from public.chats $$;
 grant execute on function public.chat_count() to anon;
 
--- Share pictures for link previews: public read, anyone may upload a new file, nobody may overwrite.
-insert into storage.buckets (id, name, public) values ('og', 'og', true) on conflict (id) do nothing;
+-- Share pictures for link previews: a public bucket (files are fetched by their public URL, nobody can list
+-- them), anyone may upload a new file, nobody may overwrite one. PNG only, at most 2 MB.
+insert into storage.buckets (id, name, public, file_size_limit, allowed_mime_types)
+values ('og', 'og', true, 2097152, array['image/png']) on conflict (id) do nothing;
 create policy "upload share pictures" on storage.objects for insert to anon
   with check (bucket_id = 'og' and name ~ '^og/[0-9A-F-]{19}\.png$');
-create policy "read share pictures" on storage.objects for select to anon using (bucket_id = 'og');

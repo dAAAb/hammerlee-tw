@@ -1,10 +1,15 @@
-// Deployment settings. Leave empty for the private Artifact preview.
+// Deployment settings.
 export const CONFIG = {
-  // the page's public address once it has its own domain, e.g. 'https://chat.hammerlee.tw/'
-  publicUrl: '',
-  // the private claude.ai Artifact link (used for share links while previewing)
+  // the public site; share links go through <publicUrl>s/<id> so LINE / Facebook show the share card
+  publicUrl: 'https://hammerlee.tw/',
+  // the claude.ai Artifact preview (share links there replay with #c-<id>)
   artifactUrl: 'https://claude.ai/artifact/1nBMLPFG1k6eSAowwYJkmN',
-  // Supabase project (production only; the Artifact sandbox cannot reach other hosts)
-  supabaseUrl: '',
-  supabaseAnonKey: '',
+  // Supabase project hammerlee-tw (Tokyo). The anon key is public by design: row-level security decides what
+  // it may do (add a finished chat, read one back, attach its share picture once).
+  supabaseUrl: 'https://ksbsjodfubmtttklalob.supabase.co',
+  supabaseAnonKey: 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImtzYnNqb2RmdWJtdHR0a2xhbG9iIiwicm9sZSI6ImFub24iLCJpYXQiOjE3OTI3NTEwNjYsImV4cCI6MjEwODMyNzA2Nn0.YyFQhLMJOYgnb8R73ZKPuqGDo-djvCvp9rvo3WMpP4E',
 };
+
+// Only the real site writes to the database; local testing and the Artifact preview never do.
+export const onPublicSite = typeof location !== 'undefined' && !!CONFIG.publicUrl
+  && location.hostname.replace(/^www\./, '') === new URL(CONFIG.publicUrl).hostname;

@@ -156,6 +156,12 @@ export class App {
     return this.chrome.typing.text !== '' || this.typing.visible;
   }
 
+  // rebuild every message (after a look setting changed); they come back already shown
+  rebuildAll() {
+    for (const [i, rec] of this.records) this.dropRecord(i, rec);
+    this.stage.dirty = true;
+  }
+
   // testing aid: show the chat as if read up to item n (all reveals finished)
   jumpTo(n) {
     const s = this.timeline[Math.min(n, this.timeline.length - 1)];
@@ -181,6 +187,7 @@ export class App {
     st.rig.target.z = this.cameraAt(this.P);
     st.rig.target.x = 0;
     this.runIntro(dt);
+    this.hooks.tilt?.(dt);
     st.applyRig();
 
     this.syncRecords();
@@ -231,6 +238,7 @@ export class App {
     const it = this.layout.items[i];
     if (it.kind === 'topic') { this.hooks.topic?.(it.msg); return; }
     if (it.kind === 'text' && it.who === 'me') this.chrome.pulseSend();
+    if (this.time > 0.3 && this.intro.done) this.hooks.feel?.(it);
     if (it.kind === 'text' && this.log) {
       const line = document.createElement('p');
       line.textContent = (it.who === 'chuan' ? '川伯：' : '我：') + plainText(it.msg.text);
@@ -302,9 +310,13 @@ export class App {
     }
     if (leading && s.pre === 'field') {
       const n = [...it.msg.text.replace(/\[[a-z_0-9]+\]/g, 'E')].length;
-      this.chrome.setTyping(it.msg.text, Math.min(n, (f / s.a) * (n + 0.5) * 1.12));
+      const shown = Math.min(n, (f / s.a) * (n + 0.5) * 1.12);
+      if (Math.floor(shown) > (this._typed || 0)) this.hooks.key?.();
+      this._typed = Math.floor(shown);
+      this.chrome.setTyping(it.msg.text, shown);
     } else if (this.chrome.typing.text) {
       this.chrome.setTyping('', 0);
+      this._typed = 0;
     }
   }
 
@@ -378,6 +390,7 @@ export class App {
       case 'bye': this.fastForward(); break;
       case 'down': window.scrollTo({ top: this.Pmax, behavior: 'smooth' }); break;
       case 'share': this.hooks.share?.(); break;
+      case 'settings': this.hooks.settings?.(); break;
     }
   }
 

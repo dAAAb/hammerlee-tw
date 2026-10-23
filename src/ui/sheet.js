@@ -22,6 +22,25 @@ export const SHEET_CSS = `
 .sheet .close { background: transparent; box-shadow: none; border-color: transparent; color: var(--navy); min-height: 52px; }
 .sheet .note { font-size: 16px; color: #5d6f92; margin-top: 12px; text-align: center; }
 .sheet .serial { font: 700 20px/1.2 ui-monospace, Menlo, monospace; letter-spacing: .06em; color: var(--navy); }
+.set-row { display: flex; align-items: center; gap: 14px; padding: 14px 4px; border-bottom: 2px dashed #e3dccb; }
+.set-txt { flex: 1; min-width: 0; }
+.set-txt label { display: block; font-size: 22px; font-weight: 700; color: var(--ink); }
+.set-txt small { display: block; margin-top: 4px; font-size: 16px; line-height: 1.5; color: #5d6f92; }
+.sheet button.switch { min-width: 92px; min-height: 56px; font-size: 22px; background: #e9eef6; }
+.sheet button.switch[aria-checked="true"] { background: var(--line-green); color: #fff; }
+.set-col { flex-direction: column; align-items: stretch; gap: 8px; }
+.set-head { font-size: 20px; margin: 22px 4px 2px; color: var(--navy); }
+.sheet input[type=range] { -webkit-appearance: none; appearance: none; width: 100%; height: 44px; background: transparent; margin: 0; }
+.sheet input[type=range]::-webkit-slider-runnable-track { height: 12px; border-radius: 6px; background: #d9e2f0; border: 2px solid var(--ink); }
+.sheet input[type=range]::-moz-range-track { height: 12px; border-radius: 6px; background: #d9e2f0; border: 2px solid var(--ink); }
+.sheet input[type=range]::-webkit-slider-thumb { -webkit-appearance: none; width: 36px; height: 36px; margin-top: -14px; border-radius: 50%; background: var(--yellow); border: 3px solid var(--ink); box-shadow: 2px 2px 0 var(--ink); }
+.sheet input[type=range]::-moz-range-thumb { width: 32px; height: 32px; border-radius: 50%; background: var(--yellow); border: 3px solid var(--ink); }
+.sheet input[type=range]:focus-visible { outline: 4px solid var(--blue); outline-offset: 2px; border-radius: 8px; }
+.set-col .ends { display: flex; justify-content: space-between; font-size: 15px; color: #5d6f92; }
+.about h3 { font-size: 20px; margin: 22px 4px 6px; color: var(--navy); }
+.about p, .about li { font-size: 17px; line-height: 1.6; margin: 4px; }
+.about ul { padding-left: 22px; margin: 6px 0; }
+.about a { color: var(--blue); }
 .toast { position: fixed; left: 50%; bottom: calc(120px + env(safe-area-inset-bottom, 0px)); transform: translateX(-50%); z-index: 30;
   background: var(--ink); color: #fff; font: 600 20px/1.3 var(--ui-font); padding: 12px 20px; border-radius: 999px; animation: sheetFade .2s; }
 @keyframes sheetUp { from { transform: translateY(40%); opacity: .4 } to { transform: none; opacity: 1 } }

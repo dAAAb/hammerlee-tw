@@ -2,7 +2,8 @@
 // and hang the sheets (viewer, share), the badge celebration and record-keeping on the app's hooks.
 import * as THREE from 'three';
 import { Stage } from './engine/stage.js';
-import { floorMaterial } from './engine/toon.js';
+import { floorMaterial, setShadowStrength } from './engine/toon.js';
+import { textLook, TEXT_DEPTH } from './chat/objects.js';
 import { GlyphFont } from './text/font.js';
 import { randomChat, replayChat, SCRIPT_VERSION } from './chat/generate.js';
 import { PHOTOS, CARDS, ELDER } from './chat/script.js';
@@ -12,10 +13,12 @@ import { TEXT_LAYER_CSS } from './ui/textlayer.js';
 import { SHEET_CSS, openSheet, button, linkButton, para, picture, placeholder, toast } from './ui/sheet.js';
 import { elderTexture, elderCanvas } from './share/elder.js';
 import { makeBadge, ensureEnvironment, shortId } from './models/badge.js';
-import { shareCard, longImage, badgeCanvas, stickerCanvas } from './share/export.js';
+import { shareCard, longImage, badgeCanvas, stickerCanvas, renderSnippet, pickSnippet } from './share/export.js';
 import { saveFile, shareFiles, copyText, canvasBlob, shareUrl, lineShareLink, recordChat, uploadShareImage, attachShareImage, inArtifact } from './share/platform.js';
 import { burst } from './fx/confetti.js';
 import { Runner } from './fx/runner.js';
+import { play, setFeel, soundFor, canVibrate } from './fx/feel.js';
+import { Tilt } from './fx/tilt.js';
 import { registerModels } from './models/registry.js';
 import { makeEmoji } from './models/emoji.js';
 import { createMeSticker } from './models/stickers-me.js';
@@ -62,6 +65,26 @@ const builderOpts = { photoAspect, loadPhoto, makeElder: id => elderTexture(font
 
 let confetti = null;
 let runner = null;
+
+// viewer settings, remembered on this device only
+const SETTINGS_KEY = 'hl:settings';
+// the look defaults are the easiest to read; people can make it more 3D or more hand-drawn in 設定
+const LOOK_DEFAULTS = { depth: TEXT_DEPTH, shadow: 1, hand: 1 };
+const settings = (() => {
+  const base = { sound: false, vibrate: false, tilt: false, ...LOOK_DEFAULTS };
+  try { return { ...base, ...JSON.parse(localStorage.getItem(SETTINGS_KEY) || '{}') }; } catch (e) { return base; }
+})();
+function applyLook() {
+  textLook.depth = settings.depth;
+  setShadowStrength(settings.shadow);
+  stage.ink.uniforms.hand.value = settings.hand;
+}
+applyLook();
+const saveSettings = () => { try { localStorage.setItem(SETTINGS_KEY, JSON.stringify(settings)); } catch (e) { /* private mode */ } };
+const tilt = new Tilt(stage);
+// sound needs a tap before it may play, so a remembered "on" starts at the first touch
+if (settings.sound || settings.vibrate) addEventListener('pointerdown', () => setFeel({ sound: settings.sound, vibrate: settings.vibrate }), { once: true });
+if (settings.tilt) addEventListener('pointerdown', () => tilt.enable(), { once: true });
 const app = new App({
   stage, font, chat, ...builderOpts,
   hooks: {
@@ -80,14 +103,18 @@ const app = new App({
     topic() { runner?.topic(); },
     avatarTap() { runner?.summon(); },
     tapExtra(rc) { return runner?.hit(rc) || false; },
+    settings: openSettings,
+    feel(it) { const n = soundFor(it); if (n) play(n); },
+    key() { play('key'); },
+    tilt(dt) { tilt.update(dt); },
   },
 });
 const calm = matchMedia('(prefers-reduced-motion: reduce)').matches;
-runner = q.has('norunner') ? null : new Runner(app, createChuan, { calm });
+runner = q.has('norunner') ? null : new Runner(app, createChuan, { calm, sfx: play });
 if (q.has('debug')) window.__runner = runner;
 window.__app = app;
 if (q.has('at')) app.jumpTo(+q.get('at'));
-if (q.has('debug')) window.__hl = { stage, font, chat, builderOpts, shareCard, longImage, badgeCanvas, stickerCanvas };
+if (q.has('debug')) window.__hl = { stage, font, chat, builderOpts, shareCard, longImage, badgeCanvas, stickerCanvas, renderSnippet, pickSnippet };
 
 // ---------------------------------------------------------------------------------------------------
 // copying from the selectable text layer: one message per line, emoji as real emoji
@@ -178,6 +205,102 @@ function onTap(h) {
       app.hooks.avatarTap?.();
       break;
   }
+}
+
+// ---------------------------------------------------------------------------------------------------
+// settings and credits
+function toggle(label, note, on, onChange) {
+  const row = document.createElement('div'); row.className = 'set-row';
+  const b = document.createElement('button');
+  b.type = 'button'; b.className = 'switch'; b.setAttribute('role', 'switch');
+  const paint = v => { b.setAttribute('aria-checked', String(v)); b.textContent = v ? '開' : '關'; };
+  paint(on);
+  b.addEventListener('click', async () => { const v = b.getAttribute('aria-checked') !== 'true'; paint(await onChange(v)); });
+  const txt = document.createElement('div'); txt.className = 'set-txt';
+  const l = document.createElement('label'); l.textContent = label;
+  const n = document.createElement('small'); n.textContent = note;
+  txt.append(l, n);
+  row.append(txt, b);
+  b.setAttribute('aria-label', label);
+  return row;
+}
+
+// a big, finger-friendly slider with words for its ends
+function slider(label, note, { min, max, step, value, words }, onInput) {
+  const row = document.createElement('div'); row.className = 'set-row set-col';
+  const id = 'sl-' + label;
+  const l = document.createElement('label'); l.textContent = label; l.htmlFor = id;
+  const n = document.createElement('small'); n.textContent = note;
+  const r = document.createElement('input');
+  Object.assign(r, { type: 'range', id, min, max, step, value });
+  const ends = document.createElement('div'); ends.className = 'ends';
+  ends.innerHTML = `<span>${words[0]}</span><span>${words[1]}</span>`;
+  let t = null;
+  r.addEventListener('input', () => { clearTimeout(t); t = setTimeout(() => onInput(+r.value), 60); });
+  const txt = document.createElement('div'); txt.className = 'set-txt';
+  txt.append(l, n);
+  row.append(txt, r, ends);
+  row.querySelector('input').value = value;
+  return row;
+}
+
+function openSettings() {
+  openSheet({ title: '設定與說明' }, sheet => {
+    sheet.append(toggle('訊息提示音', '每則訊息出現時「叮咚」一聲。', settings.sound, v => {
+      settings.sound = v; saveSettings(); setFeel({ sound: v }); return v;
+    }));
+    sheet.append(toggle('震動', canVibrate() ? '每則訊息出現時手機輕輕震一下。' : '這支手機或瀏覽器不支援網頁震動（iPhone 目前都不支援）。', settings.vibrate && canVibrate(), v => {
+      if (!canVibrate()) { toast('這裡不支援震動'); return false; }
+      settings.vibrate = v; saveSettings(); setFeel({ vibrate: v }); return v;
+    }));
+    sheet.append(toggle('立體視角', '轉動手機（電腦上是移動滑鼠），光影和角度會跟著微微改變。iPhone 會先問你是否允許使用動作感應。', settings.tilt, async v => {
+      settings.tilt = v; saveSettings();
+      if (!v) { tilt.disable(); return false; }
+      const r = await tilt.enable();
+      if (r === 'pointer-only') toast('沒有取得動作感應權限，電腦上可用滑鼠體驗');
+      return true;
+    }));
+    sheet.append(toggle('大字', '把聊天的字放大 1.2 倍。', app.big, v => { app.press('big'); return app.big; }));
+    const head = document.createElement('h3'); head.className = 'set-head'; head.textContent = '畫面風格';
+    sheet.append(head);
+    sheet.append(slider('字的立體厚度', '字從泡泡上浮起來多高。', { min: 0.03, max: 0.32, step: 0.01, value: settings.depth, words: ['平平的，好讀', '厚厚的，很立體'] }, v => {
+      settings.depth = v; saveSettings(); applyLook(); app.rebuildAll();
+    }));
+    sheet.append(slider('陰影濃淡', '泡泡、貼圖投在地上的藍色影子。', { min: 0, max: 1.4, step: 0.05, value: settings.shadow, words: ['淡', '濃'] }, v => {
+      settings.shadow = v; saveSettings(); applyLook();
+    }));
+    sheet.append(slider('手繪感', '墨線的手繪抖動和紙張紋理。', { min: 0, max: 1.6, step: 0.05, value: settings.hand, words: ['乾淨俐落', '手繪感重'] }, v => {
+      settings.hand = v; saveSettings(); applyLook();
+    }));
+    const reset = document.createElement('div'); reset.className = 'acts';
+    reset.append(button('畫面恢復預設（最好讀）', () => {
+      Object.assign(settings, LOOK_DEFAULTS); saveSettings(); applyLook(); app.rebuildAll();
+      sheet.querySelectorAll('input[type=range]').forEach((r, i) => { r.value = [settings.depth, settings.shadow, settings.hand][i]; });
+      toast('已恢復預設');
+    }));
+    sheet.append(reset);
+    const again = document.createElement('div'); again.className = 'acts';
+    again.append(button('跟川伯重新聊一次（換一段新的）', () => { location.hash = ''; location.reload(); }));
+    sheet.append(again);
+    const about = document.createElement('div'); about.className = 'about';
+    about.innerHTML = `
+      <h3>關於這個網頁</h3>
+      <p>這是李四川（川伯）競選團隊的互動網頁。內容依據川伯的公開政見與經歷整理，照片與政見圖卡取自
+      <a href="https://portaly.cc/hammerlee" target="_blank" rel="noopener">李四川官方 Portaly</a>。</p>
+      <h3>隱私</h3>
+      <p>不需要登入，也不會要你輸入任何資料。對話結束時，只會記錄這段對話的編號、聊到的話題和時間，用來讓分享連結顯示預覽圖；
+      設定只存在你自己的手機裡。立體視角只在你的手機上計算，不會傳出去。</p>
+      <h3>開源授權與致謝</h3>
+      <ul>
+        <li><a href="https://threejs.org" target="_blank" rel="noopener">three.js</a> — MIT License</li>
+        <li><a href="https://github.com/justfont/Huninn" target="_blank" rel="noopener">jf 粉圓 Huninn</a> — SIL Open Font License 1.1</li>
+        <li><a href="https://github.com/chiron-fonts/chiron-goround-tc" target="_blank" rel="noopener">Chiron GoRound TC</a> — SIL Open Font License 1.1</li>
+        <li>畫風參考 <a href="https://april-zhu.com/colorfigures" target="_blank" rel="noopener">Colorfigures</a>（April Zhu）— MIT License</li>
+        <li>Google Fonts 提供網頁字型服務</li>
+      </ul>
+      <p class="note">對話編號 No. ${serial}</p>`;
+    sheet.append(about);
+  });
 }
 
 // ---------------------------------------------------------------------------------------------------

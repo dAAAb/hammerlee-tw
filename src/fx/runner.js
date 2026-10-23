@@ -7,9 +7,10 @@ const BUBBLE_KINDS = { text: 0.55, card: 0.45, photo: 0.42, elder: 0.42, date: 0
 const BLOCKING = new Set(['sticker', 'badge', 'cover']);
 
 export class Runner {
-  constructor(app, createChuan, { calm = false } = {}) {
+  constructor(app, createChuan, { calm = false, sfx = () => {} } = {}) {
     this.app = app;
     this.calm = calm;
+    this.sfx = sfx;
     this.c = createChuan({ hat: true, tools: true });
     this.g = this.c.group;
     this.g.visible = false;
@@ -56,6 +57,7 @@ export class Runner {
     this.state = 'jump';
     this.c.setFacing(0.0);
     this.c.play('jump');   // the rig goes back to running by itself when the hop ends
+    this.sfx('boing');
     this.jumpLeft = (this.c.durations?.jump || 0.9) + 0.05;
   }
 
@@ -95,6 +97,7 @@ export class Runner {
         this.tripAt = 2;
         this.state = 'trip';
         c.play('trip', { onDone: () => { this.state = 'run'; c.play('run'); } });
+        setTimeout(() => this.sfx('bonk'), 380);
       } else if (f > this.hopAt) {
         this.hopAt = 2;
         this.jump();

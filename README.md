@@ -22,6 +22,8 @@
 - 第一次進來，對話停住時會跳出「往下滑，繼續聊」。
 - 字都可以長按選取、複製（3D 字上方疊了一層對齊的透明真實文字，螢幕閱讀器也讀得到）。
 - 點貼圖、照片、長輩圖、徽章、政見卡都能放大、下載、分享。
+- 輸入列左邊的齒輪是「設定與說明」：訊息提示音、震動（Android）、立體視角（轉動手機／移動滑鼠）、大字，
+  以及「畫面風格」三個滑桿（字的立體厚度、陰影濃淡、手繪感），預設值是最好讀的設定；也列出開源授權與隱私說明。
 
 ### 滑太快怎麼辦？
 頁面捲動是「目標」，畫面上的進度在追它：已經看過的部分可以自由來回，但往新內容前進時最快每秒約 760px（約 3～4 則），
@@ -86,8 +88,9 @@ Artifact 預覽版在沙盒裡，不能連外部服務；它的內建資料庫�
 正式上線建議：
 
 1. Vercel 部署本專案（`vercel.json` 已設定，`/s/<編號>` 會回傳帶 og:image 的分享頁）。
-2. Supabase 開新專案，套用 `supabase/migrations/`（`chats` 表：編號與徽章號碼皆唯一；`og` 儲存桶放分享縮圖）。
-3. 在 `src/config.js` 填 `publicUrl`、`supabaseUrl`、`supabaseAnonKey`；Vercel 環境變數設 `PUBLIC_URL`、`SUPABASE_URL`、`SUPABASE_ANON_KEY`。
+2. Supabase 專案 `hammerlee-tw`（東京）已套用 `supabase/migrations/`：`chats` 表的編號與徽章號碼皆唯一；`og` 儲存桶放分享縮圖。
+3. `src/config.js` 已填好 `publicUrl`、`supabaseUrl`、`supabaseAnonKey`（anon key 本來就是公開的，權限由資料列安全規則控管）。
+   只有在 hammerlee.tw 上才會寫入資料庫，本機測試與 Artifact 預覽都不會。
 
 分享時，頁面會把分享卡上傳到 Supabase Storage，LINE / Facebook 讀 `/s/<編號>` 時就會顯示那張卡片。
 

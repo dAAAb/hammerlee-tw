@@ -9,6 +9,8 @@ import { emoji, sticker, avatar } from '../models/registry.js';
 import { buildCover } from './cover.js';
 
 const TEXT_TOP = '#1c2442';
+export const TEXT_DEPTH = 0.12;   // how far letters stand off the bubble (em)
+export const textLook = { depth: TEXT_DEPTH, shadow: false };   // the bench flips these to compare looks
 const GRAY_TOP = '#5d6f92';
 const CAT = { teal: '#16a6a6', coral: '#e8735a', blue: '#1185d6', red: '#d9473a', purple: '#6f7fe6', pink: '#e8657e', orange: '#ef8f24' };
 
@@ -129,7 +131,7 @@ export class Builder {
     L.lines.forEach((line, i) => {
       const base = BUBBLE.padY + i * L.lineH + (L.lineH - content) / 2 + asc;
       for (const g of line.items) {
-        if (g.t === 'ch') { if (g.ch !== ' ') items.push({ ch: g.ch, x: BUBBLE.pad + g.x, z: base, size: 1, depth: 0.2, y: T, order: order++ }); }
+        if (g.t === 'ch') { if (g.ch !== ' ') items.push({ ch: g.ch, x: BUBBLE.pad + g.x, z: base, size: 1, depth: textLook.depth, y: T, order: order++ }); }
         else emojis.push({ name: g.name, x: BUBBLE.pad + g.x + g.w / 2, z: base - 0.36, order: order++ });
       }
     });
@@ -140,7 +142,7 @@ export class Builder {
       rec.mats.push(reveal);
       const tm = new THREE.Mesh(geo, reveal);
       tm.userData.ownGeo = true;
-      tm.castShadow = true;
+      tm.castShadow = textLook.shadow;   // a letter's shadow on the bubble reads as a blurry double; the raised sides are enough
       rec.add(tm);
       rec.textMesh = tm;
     }

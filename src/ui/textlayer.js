@@ -4,6 +4,7 @@
 // selection shows as a yellow highlighter over the 3D type, and screen readers read the chat.
 import * as THREE from 'three';
 import { BUBBLE } from '../chat/layout.js';
+import { textLook } from '../chat/objects.js';
 
 const EMOJI_CHAR = {
   heart: '❤️', sparkle: '✨', smile: '😊', laugh: '😄', thumb: '👍', star: '⭐', party: '🎉', flower: '🌸', sun: '☀️',
@@ -54,7 +55,7 @@ export class TextLayer {
   // position every block on the 3D letter tops (height = bubble thickness + letter depth)
   update() {
     const st = this.stage, em = st.emPx;
-    const y = BUBBLE.thick + 0.2;
+    const y = BUBBLE.thick + textLook.depth;
     for (const [rec, b] of this.blocks) {
       const it = rec.item, g = rec.group.position;
       v.set(g.x + BUBBLE.pad, y, g.z + BUBBLE.padY);

@@ -2,7 +2,7 @@
 //  - inside a claude.ai Artifact: saves go through the `downloads` capability, records through `db`
 //    (the sandbox blocks other hosts, so Supabase is not reachable from there);
 //  - on its own site (production): Web Share with the picture, plain downloads, and Supabase.
-import { CONFIG } from '../config.js';
+import { CONFIG, onPublicSite } from '../config.js';
 
 export const inArtifact = typeof window !== 'undefined' && !!window.claude?.use;
 const use = name => (inArtifact ? window.claude.use(name).catch(() => null) : Promise.resolve(null));
@@ -10,7 +10,7 @@ const use = name => (inArtifact ? window.claude.use(name).catch(() => null) : Pr
 // On the public site a link goes through /s/<id> so LINE and Facebook show the share card as its preview;
 // elsewhere the id rides in the #c- anchor and the page replays it directly.
 export function shareUrl(chatId) {
-  if (CONFIG.publicUrl && !inArtifact) return `${CONFIG.publicUrl.replace(/\/?$/, '/')}s/${chatId}`;
+  if (CONFIG.publicUrl && (onPublicSite || !inArtifact)) return `${CONFIG.publicUrl.replace(/\/?$/, '/')}s/${chatId}`;
   const base = inArtifact ? CONFIG.artifactUrl : location.origin + location.pathname;
   return `${base}#c-${chatId}`;
 }
@@ -66,7 +66,7 @@ export function lineShareLink(url, text) {
 export async function recordChat(rec) {
   const row = { id: rec.id, serial: rec.serial, topics: rec.topics, script: rec.script, finished_at: new Date().toISOString() };
   try {
-    if (CONFIG.supabaseUrl && !inArtifact) {
+    if (CONFIG.supabaseUrl && onPublicSite) {
       const r = await fetch(`${CONFIG.supabaseUrl}/rest/v1/chats`, {
         method: 'POST',
         headers: { apikey: CONFIG.supabaseAnonKey, Authorization: `Bearer ${CONFIG.supabaseAnonKey}`, 'Content-Type': 'application/json', Prefer: 'resolution=ignore-duplicates,return=minimal' },
@@ -82,7 +82,7 @@ export async function recordChat(rec) {
 
 // Upload the share picture so the link preview (og:image) can show it. Production only.
 export async function uploadShareImage(serial, blob) {
-  if (!CONFIG.supabaseUrl || inArtifact) return null;
+  if (!CONFIG.supabaseUrl || !onPublicSite) return null;
   const path = `og/${serial}.png`;
   const r = await fetch(`${CONFIG.supabaseUrl}/storage/v1/object/og/${path}`, {
     method: 'POST',
@@ -95,7 +95,7 @@ export async function uploadShareImage(serial, blob) {
 }
 
 export async function attachShareImage(id, imageUrl) {
-  if (!CONFIG.supabaseUrl || inArtifact || !imageUrl) return;
+  if (!CONFIG.supabaseUrl || !onPublicSite || !imageUrl) return;
   await fetch(`${CONFIG.supabaseUrl}/rest/v1/chats?id=eq.${id}&og_image=is.null`, {
     method: 'PATCH',
     headers: { apikey: CONFIG.supabaseAnonKey, Authorization: `Bearer ${CONFIG.supabaseAnonKey}`, 'Content-Type': 'application/json', Prefer: 'return=minimal' },
