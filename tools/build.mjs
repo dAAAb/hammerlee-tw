@@ -17,7 +17,7 @@ mkdirSync('dist', { recursive: true });
 async function bundle() {
   const res = await esbuild.build({
     entryPoints: [entry], bundle: true, format: 'esm', minify: !dev, write: false,
-    target: ['es2022', 'safari15.4'], legalComments: 'none', define: { __DEV__: String(dev) },
+    target: ['es2022', 'safari15.4'], legalComments: 'eof', define: { __DEV__: String(dev) },
   });
   return res.outputFiles[0].text;
 }
@@ -77,6 +77,8 @@ async function once() {
   writeFileSync('dist/artifact.html', frag);
   writeFileSync('dist/index.html', `<!doctype html><html lang="zh-Hant"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">${SITE_HEAD}</head><body>${frag}</body></html>`);
   if (existsSync('public')) cpSync('public', 'dist', { recursive: true });
+  // the licences of everything we ship (three.js, uqr, Colorfigures, both OFL fonts), linked from 設定
+  cpSync('THIRD_PARTY_NOTICES.txt', 'dist/licenses.txt');
   writeGlyphText();
   console.log(`built in ${Date.now() - t}ms — app ${(js.length / 1024).toFixed(0)} KB`);
 }

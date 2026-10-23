@@ -14,9 +14,12 @@ export function initAnalytics(allowed, { dry = false } = {}) {
   window.dataLayer = window.dataLayer || [];
   window.gtag = function gtag() { window.dataLayer.push(arguments); };
   window.gtag('js', new Date());
-  // the #c-… replay id stays out of page URLs; arriving from a friend's link is its own event
+  // the #c-… replay id and a ?pair= room code stay out of page URLs; arriving from a friend's link is its own event
+  const page = new URL(location.href);
+  page.hash = '';
+  page.searchParams.delete('pair');
   window.gtag('config', id, {
-    page_location: location.origin + location.pathname + location.search,
+    page_location: page.href,
     allow_google_signals: false,
     allow_ad_personalization_signals: false,
   });

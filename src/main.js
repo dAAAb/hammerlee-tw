@@ -14,7 +14,7 @@ import { SHEET_CSS, openSheet, button, linkButton, para, picture, placeholder, t
 import { elderTexture, elderCanvas } from './share/elder.js';
 import { makeBadge, ensureEnvironment, shortId } from './models/badge.js';
 import { shareCard, longImage, badgeCanvas, stickerCanvas, renderSnippet, pickSnippet, buildCard } from './share/export.js';
-import { saveFile, shareFiles, copyText, canvasBlob, shareUrl, lineShareLink, recordChat, uploadShareImage, attachShareImage, inArtifact } from './share/platform.js';
+import { saveFile, shareFiles, copyText, canvasBlob, shareUrl, lineShareLink, recordChat, inArtifact } from './share/platform.js';
 import { initAnalytics, setAnalytics, track, trackThen } from './share/analytics.js';
 import { burst } from './fx/confetti.js';
 import { Runner } from './fx/runner.js';
@@ -174,7 +174,7 @@ function getPair() {
   return pair;
 }
 window.__app = app;
-if (q.has('at')) app.jumpTo(+q.get('at'));
+if (/^\d{1,3}$/.test(q.get('at') || '')) app.jumpTo(+q.get('at'));   // dev aid; anything else is ignored
 if (q.has('debug')) window.__hl = { stage, font, chat, builderOpts, shareCard, longImage, badgeCanvas, stickerCanvas, renderSnippet, pickSnippet, buildCard, createScenery, BUILDS, TIERS };
 
 // ---------------------------------------------------------------------------------------------------
@@ -393,11 +393,12 @@ function openSettings() {
       <ul>
         <li><a href="https://threejs.org" target="_blank" rel="noopener">three.js</a> — MIT License</li>
         <li><a href="https://github.com/justfont/Huninn" target="_blank" rel="noopener">jf 粉圓 Huninn</a> — SIL Open Font License 1.1</li>
-        <li><a href="https://github.com/chiron-fonts/chiron-goround-tc" target="_blank" rel="noopener">Chiron GoRound TC</a> — SIL Open Font License 1.1</li>
-        <li>畫風參考 <a href="https://april-zhu.com/colorfigures" target="_blank" rel="noopener">Colorfigures</a>（April Zhu）— MIT License</li>
+        <li><a href="https://github.com/chiron-fonts/chiron-go-round-tc" target="_blank" rel="noopener">Chiron GoRound TC</a> — SIL Open Font License 1.1</li>
+        <li>畫風與配色參考 <a href="https://april-zhu.com/colorfigures" target="_blank" rel="noopener">Colorfigures</a>（April Zhu、Tolga Cohce）— MIT License</li>
         <li><a href="https://github.com/unjs/uqr" target="_blank" rel="noopener">uqr</a>（配對用的 QR 碼）— MIT License</li>
         <li>Google Fonts 提供網頁字型服務；Google Analytics 提供匿名使用統計</li>
       </ul>
+      <p><a href="licenses.txt" target="_blank" rel="noopener">完整授權條款</a>　·　<a href="https://github.com/dAAAb/hammerlee-tw" target="_blank" rel="noopener">原始碼</a></p>
       <p class="note">對話編號 No. ${serial}</p>`;
     sheet.append(about);
   });
@@ -426,8 +427,6 @@ function openShare() {
     requestAnimationFrame(() => setTimeout(() => {
       card = shareCard(stage, font, chat, builderOpts);
       ph.replaceWith(picture(card, '分享圖：我跟未來新北市長李四川的對話'));
-      // production: the card becomes the link preview picture
-      canvasBlob(card).then(b => uploadShareImage(serial, b)).then(u => attachShareImage(chat.id, u));
     }, 30));
     const acts = document.createElement('div'); acts.className = 'acts';
     const native = !inArtifact && !!navigator.share;

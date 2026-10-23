@@ -4,6 +4,9 @@
 // drawn with physical materials, so it catches real reflections from the environment map.
 import * as THREE from 'three';
 import { mulberry32, hashString } from '../chat/dsl.js';
+import { shortId } from '../chat/serial.js';
+
+export { shortId };
 
 const METALS = [
   { name: '金', color: '#f7c948', rough: 0.2 },
@@ -45,11 +48,6 @@ export function badgeSpec(id) {
 }
 
 // 16 hex digits from the id, grouped for reading aloud: 7F3A-91C2-77D0-1E4B
-export function shortId(id) {
-  const [a, b] = hashString('serial:' + id);
-  const hex = (a.toString(16).padStart(8, '0') + b.toString(16).padStart(8, '0')).toUpperCase();
-  return hex.match(/.{4}/g).join('-');
-}
 
 function outline(spec, R) {
   const s = new THREE.Shape();

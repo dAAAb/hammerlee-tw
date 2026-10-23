@@ -93,7 +93,9 @@ export function orderedPicks(counts, k) {
   return e[k] * f;
 }
 
-// small seeded RNG for anything that must look random but stay reproducible (layout jitter, badge looks)
+// small seeded RNG for anything that must look random but stay reproducible (layout jitter, badge looks).
+// mulberry32 is Tommy Ettinger's public-domain generator; hashString below is bryc's cyrb53-style string hash
+// (public domain, https://github.com/bryc/code/blob/master/jshash/experimental/cyrb53.js) returning both halves.
 export function mulberry32(a) {
   return function () {
     a |= 0; a = a + 0x6D2B79F5 | 0;

@@ -62,43 +62,21 @@ export function lineShareLink(url, text) {
 
 // --- storing the finished conversation ------------------------------------------------------------
 // One record per finished chat: its id (= the whole conversation), the short serial on the badge,
-// which topics came up, and when. In production the Supabase table enforces that each id is unique.
+// which topics came up (the table stamps the time). In production the Supabase table enforces that each id is
+// unique, and the public key can only add rows: it can't read, change or delete any.
 export async function recordChat(rec) {
-  const row = { id: rec.id, serial: rec.serial, topics: rec.topics, script: rec.script, finished_at: new Date().toISOString() };
+  const row = { id: rec.id, serial: rec.serial, topics: rec.topics, script: rec.script };
   try {
     if (CONFIG.supabaseUrl && onPublicSite) {
       const r = await fetch(`${CONFIG.supabaseUrl}/rest/v1/chats`, {
         method: 'POST',
-        headers: { apikey: CONFIG.supabaseAnonKey, Authorization: `Bearer ${CONFIG.supabaseAnonKey}`, 'Content-Type': 'application/json', Prefer: 'resolution=ignore-duplicates,return=minimal' },
+        headers: { apikey: CONFIG.supabaseAnonKey, Authorization: `Bearer ${CONFIG.supabaseAnonKey}`, 'Content-Type': 'application/json', Prefer: 'return=minimal' },
         body: JSON.stringify(row),
       });
       return r.ok ? 'supabase' : 'error';
     }
     const db = await use('db');
-    if (db) { await db.collection('chats').doc(rec.serial.replace(/-/g, '')).set(row); return 'artifact-db'; }
+    if (db) { await db.collection('chats').doc(rec.serial.replace(/-/g, '')).set({ ...row, finished_at: new Date().toISOString() }); return 'artifact-db'; }
   } catch (e) { console.warn('record', e); }
   try { localStorage.setItem('hl:lastChat', JSON.stringify(row)); return 'local'; } catch (e) { return 'none'; }
-}
-
-// Upload the share picture so the link preview (og:image) can show it. Production only.
-export async function uploadShareImage(serial, blob) {
-  if (!CONFIG.supabaseUrl || !onPublicSite) return null;
-  const path = `og/${serial}.png`;
-  const r = await fetch(`${CONFIG.supabaseUrl}/storage/v1/object/og/${path}`, {
-    method: 'POST',
-    headers: { apikey: CONFIG.supabaseAnonKey, Authorization: `Bearer ${CONFIG.supabaseAnonKey}`, 'Content-Type': 'image/png', 'x-upsert': 'false' },
-    body: blob,
-  }).catch(() => null);
-  if (!r || !(r.ok || r.status === 409)) return null;
-  const pub = `${CONFIG.supabaseUrl}/storage/v1/object/public/og/${path}`;
-  return pub;
-}
-
-export async function attachShareImage(id, imageUrl) {
-  if (!CONFIG.supabaseUrl || !onPublicSite || !imageUrl) return;
-  await fetch(`${CONFIG.supabaseUrl}/rest/v1/chats?id=eq.${id}&og_image=is.null`, {
-    method: 'PATCH',
-    headers: { apikey: CONFIG.supabaseAnonKey, Authorization: `Bearer ${CONFIG.supabaseAnonKey}`, 'Content-Type': 'application/json', Prefer: 'return=minimal' },
-    body: JSON.stringify({ og_image: imageUrl }),
-  }).catch(() => null);
 }
