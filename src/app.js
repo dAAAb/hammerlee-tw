@@ -74,6 +74,9 @@ export class App {
       this.hooks.relayout?.();
       this.layout = layoutChat(this.chat, this.font, { viewW: st.viewW, photoAspect: this.builder.photoAspect, start: this.hooks.start || new Date(), cover: true });
     }
+    // selectable text only inside the chat area, never under the header or the input bar
+    const hp = this.chrome.headerH * unit * st.emPx, bp = (this.chrome.barH + 0.6) * unit * st.emPx;
+    document.getElementById('textlayer').style.clipPath = `inset(${hp.toFixed(0)}px 0 ${bp.toFixed(0)}px 0)`;
     this.buildTimeline();
     this.scroller.style.height = (this.total + window.innerHeight + 80) + 'px';   // a little slack so the very end is always reachable
     if (keep && !soft) {

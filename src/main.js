@@ -83,6 +83,7 @@ const app = new App({
 });
 const calm = matchMedia('(prefers-reduced-motion: reduce)').matches;
 runner = q.has('norunner') ? null : new Runner(app, createChuan, { calm });
+if (q.has('debug')) window.__runner = runner;
 window.__app = app;
 if (q.has('at')) app.jumpTo(+q.get('at'));
 if (q.has('debug')) window.__hl = { stage, font, chat, builderOpts, shareCard, longImage, badgeCanvas, stickerCanvas };
@@ -221,6 +222,9 @@ function openShare() {
     const one = document.createElement('div'); one.className = 'acts'; one.append(longBtn);
     sheet.append(one);
     sheet.append(para('朋友打開連結，會看到跟你一模一樣的這段對話，看完也能開始他自己的。', 'note'));
+    const again = document.createElement('div'); again.className = 'acts';
+    again.append(button('跟川伯再聊一次（換一段新的）', () => { location.hash = ''; location.reload(); }));
+    sheet.append(again);
   });
 }
 

@@ -6,7 +6,7 @@
 // after a ?t= jump; by default a ?t= shot freezes on that frame).
 import * as THREE from 'three';
 import { bench, params } from './harness.js';
-import { createChuan, EXPRESSIONS, SPEEDS } from '../models/chuan.js';
+import { createChuan, SPEEDS } from '../models/chuan.js';
 import { createChuanAvatar, createChuanHead } from '../models/chuan-avatar.js';
 import { createChuanSticker, CHUAN_STICKER_IDS } from '../models/stickers-chuan.js';
 import { POSES } from '../models/catalog.js';
@@ -38,7 +38,7 @@ if (show === 'poses') {
     B.label(name, x, z + 1.75, 0.5);
     tick((dt) => c.update(dt));
   });
-  target(0, (rows - 1) * dz / 2 - 1.0);
+  target(1.2, (rows - 1) * dz / 2 - 1.0);
 }
 
 if (show === 'stickers') {
@@ -56,7 +56,7 @@ if (show === 'stickers') {
       if (delay >= 0) s.userData.pop(Math.min(1, Math.max(0, (t - delay) / 0.7)));
     });
   });
-  target(0, (rows - 1) * dz / 2 - 1.2);
+  target(1.2, (rows - 1) * dz / 2 - 1.2);
 }
 
 if (show === 'run' && !params.has('sheet')) {

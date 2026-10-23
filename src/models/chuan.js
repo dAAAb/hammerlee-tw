@@ -18,7 +18,6 @@ const DEG = Math.PI / 180;
 const V3 = THREE.Vector3, QT = THREE.Quaternion, M4 = THREE.Matrix4;
 const ONE = new V3(1, 1, 1);
 const DOWN = new V3(0, -1, 0);
-const QI = new QT();
 
 // ---------------------------------------------------------------------------------------------------------
 // proportions (em)
@@ -1331,6 +1330,7 @@ export function createChuan({ hat = true, tools = true } = {}) {
     get time() { return mode.t; },
     setPose, play, update,
     setFacing(yaw) { rig.facing.rotation.y = yaw; },
+    // expression override until the next update (poses also take setPose(name, k, { face }))
     setFace(name) { rig.head.setFace(name); },
   };
   setPose('idle', 1);

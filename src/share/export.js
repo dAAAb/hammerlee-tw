@@ -131,8 +131,11 @@ export async function longImage(stage, font, chat, builderOpts, { width = 900, o
   const viewW = 17;
   const lay = layoutChat(chat, font, { viewW, photoAspect: builderOpts.photoAspect });
   const W = columnWidth(viewW) + 1.2;
+  // iPhone Safari refuses canvases over ~16.7 M pixels: shrink the width until the whole picture fits
+  const LIMIT = 15.5e6, k = (lay.height + 3) / W;
+  width = Math.min(width, Math.floor((-660 + Math.sqrt(660 * 660 + 4 * k * LIMIT)) / (2 * k)));
   const emPx = width / W;
-  const head = 300, foot = 360;
+  const head = Math.round(300 * width / 900), foot = Math.round(360 * width / 900);
   const bodyH = Math.ceil((lay.height + 3) * emPx);
   const H = Math.min(30000, head + bodyH + foot);
   const out = document.createElement('canvas'); out.width = width; out.height = H;
@@ -170,21 +173,25 @@ export async function longImage(stage, font, chat, builderOpts, { width = 900, o
     onProgress?.(Math.min(1, z0 / lay.height));
     await new Promise(r => setTimeout(r, 0));
   }
-  // header
-  g.fillStyle = NAVY; g.fillRect(0, 0, width, head);
-  g.fillStyle = YELLOW; g.fillRect(0, head - 14, width, 14);
-  logoBars(g, width - 130, 150, 60, 1);
+  // header and footer are drawn on a 900-wide design and scaled to the picture
+  const sc = width / 900;
+  g.save(); g.scale(sc, sc);
+  g.fillStyle = NAVY; g.fillRect(0, 0, 900, 300);
+  g.fillStyle = YELLOW; g.fillRect(0, 286, 900, 14);
+  logoBars(g, 770, 150, 60, 1);
   text(g, font, '我跟川伯的對話', 48, 118, 64, '#ffffff');
   text(g, font, '未來新北市長 李四川', 50, 182, 34, '#bcd3ff');
   text(g, font, 'No. ' + shortId(chat.id), 50, 240, 30, YELLOW);
-  // footer
+  g.restore();
   const fy = H - foot;
-  g.fillStyle = '#fffdf6'; g.fillRect(0, fy, width, foot);
-  g.fillStyle = INK; g.fillRect(0, fy, width, 6);
+  g.save(); g.translate(0, fy); g.scale(sc, sc);
+  g.fillStyle = '#fffdf6'; g.fillRect(0, 0, 900, 360);
+  g.fillStyle = INK; g.fillRect(0, 0, 900, 6);
   const badge = badgeCanvas(stage, font, chat.id, 520, 'iso');
-  g.drawImage(badge, 34, fy + 40, 260, 260);
-  text(g, font, '這是只屬於我的一段對話', 320, fy + 110, 38, NAVY);
-  text(g, font, '你也來跟川伯聊聊天吧！', 320, fy + 170, 38, INK);
-  text(g, font, '11 月 28 日 新北的事 交給做過的人', 320, fy + 236, 28, '#5d6f92');
+  g.drawImage(badge, 34, 40, 260, 260);
+  text(g, font, '這是只屬於我的一段對話', 320, 110, 38, NAVY);
+  text(g, font, '你也來跟川伯聊聊天吧！', 320, 170, 38, INK);
+  text(g, font, '11 月 28 日 新北的事 交給做過的人', 320, 236, 28, '#5d6f92');
+  g.restore();
   return out;
 }
