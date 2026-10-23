@@ -3,18 +3,21 @@
 // hat, picks it up and runs on. Tap him and he jumps, then hurries off again. Tap 川伯's avatar and he comes.
 //
 // 多支手機一起玩 (net/pair.js sets `link`): with phones lying in a row, he runs past the edge toward the next phone
-// and that phone lets him run in from its own edge in the same stride, on to the end of the row; then back.
+// and that phone lets him run in from its own edge in the same stride, on to the end of the row; then back —
+// faster the more phones there are. And now and then he stops to build a little model (fx/builds.js).
 import * as THREE from 'three';
+import { BUILD_RATE } from './builds.js';
 
 const BUBBLE_KINDS = { text: 0.55, card: 0.45, photo: 0.42, elder: 0.42, date: 0.28, end: 0.28 };
 const BLOCKING = new Set(['sticker', 'badge', 'cover']);
 const GAP_PX = 60;   // the bezels between two phones lying side by side, in CSS px (about 1 cm)
 
 export class Runner {
-  constructor(app, createChuan, { calm = false, sfx = () => {} } = {}) {
+  constructor(app, createChuan, { calm = false, sfx = () => {}, builds = null } = {}) {
     this.app = app;
     this.calm = calm;
     this.sfx = sfx;
+    this.builds = builds;
     this.c = createChuan({ hat: true, tools: true });
     this.g = this.c.group;
     this.g.visible = false;
@@ -54,6 +57,11 @@ export class Runner {
 
   laneFree(z) { return !this.app.layout.items.some(it => BLOCKING.has(it.kind) && z > it.z - 2 && z < it.z + it.h + 1.5); }
   runYaw() { return this.dir > 0 ? Math.PI / 2 - 0.42 : -Math.PI / 2 + 0.42; }
+  // where along this run (as a share of it) he stops to build, if he does
+  buildPoint() {
+    const P = this.partner, share = P ? P.buildShare : this.link ? 0 : 1;
+    return this.builds && Math.random() < BUILD_RATE * share ? 0.1 + Math.random() * 0.35 : 2;
+  }
 
   start({ from = -this.heading(), z = null, trip = !this.calm && Math.random() < 0.32, hop = false } = {}) {
     const st = this.app.stage;
@@ -72,10 +80,12 @@ export class Runner {
     this.endX = -from * half;
     this.tripAt = trip ? (Math.random() * 0.5 + 0.25) : 2;
     this.hopAt = hop ? 0.3 : 2;
+    this.buildAt = hop ? 2 : this.buildPoint();
     this.dist = 0;
     this.total = half * 2;
     this.handed = this.tripped = this.soon = false;
     this.want = 0;
+    this.site = null;
     this.state = 'run';
     this.c.play('run');
     this.c.setFacing(this.runYaw());
@@ -103,6 +113,8 @@ export class Runner {
     this.tripped = s.tripped || s.pose === 'trip';
     this.tripAt = this.tripped || this.calm || Math.random() > 0.3 ? 2 : Math.random() * 0.45 + 0.25;
     this.hopAt = 2;
+    this.buildAt = this.buildPoint();
+    this.site = null;
     this.handed = false;                      // on to the next phone, if there is one that way
     this.soon = false;
     this.y = s.h;
@@ -113,6 +125,24 @@ export class Runner {
     c.setFacing(Number.isFinite(s.facing) ? s.facing : this.runYaw());
     this.g.visible = true;
     this.g.position.set(this.x, this.y, this.lane);
+  }
+
+  // time to build: pick free floor ahead (fx/builds.js) and run on until he's beside it
+  plan() {
+    const at = this.builds?.spot(this.x, this.lane, this.dir);
+    if (at) { this.site = at; this.siteX = at.x - this.dir * 1.25; }
+  }
+  // he stops, turns to us and digs; the model rises beside him, he gives a thumbs-up, runs on
+  build() {
+    const at = this.site;
+    this.site = null;
+    if (!this.builds?.begin(at)) return;
+    this.state = 'build';
+    this.buildT = 0;
+    this.cheered = false;
+    this.c.setFacing(0);
+    this.c.setPose('shovelDig');
+    this.sfx('dig');
   }
 
   trip() {
@@ -167,9 +197,11 @@ export class Runner {
       if (this.cool <= 0 && (!this.app.ended || P) && this.app.intro.done) { this.start(); if (this.state === 'off') this.cool = 4; }
       return;
     }
-    c.update(dt);
+    // linked phones: he runs faster (legs and all)
+    const pace = P && this.state !== 'build' ? P.pace : 1, k = dt * pace;
+    c.update(k);
     if (this.state === 'run') {
-      const step = (c.speed || 4) * dt;
+      const step = (c.speed || 4) * k;
       this.x += this.dir * step;
       this.dist += step;
       const f = this.dist / this.total;
@@ -180,6 +212,11 @@ export class Runner {
       } else if (f > this.hopAt) {
         this.hopAt = 2;
         this.jump();
+      } else if (f > this.buildAt) {
+        this.buildAt = 2;
+        this.plan();
+      } else if (this.site && (this.x - this.siteX) * this.dir >= 0) {
+        this.build();
       }
       if ((this.dir > 0 && this.x > this.endX) || (this.dir < 0 && this.x < this.endX)) {
         this.state = 'off';
@@ -188,9 +225,13 @@ export class Runner {
         return;
       }
     } else if (this.state === 'trip') {
-      this.x += this.dir * (c.speed || 0) * dt;         // the stumble carries him forward a bit
+      this.x += this.dir * (c.speed || 0) * k;          // the stumble carries him forward a bit
+    } else if (this.state === 'build') {
+      this.buildT += dt;
+      if (this.buildT > 1.9 && !this.cheered) { this.cheered = true; c.setPose('thumbsUp'); }
+      if (this.buildT > 2.9) { this.state = 'run'; c.play('run'); c.setFacing(this.runYaw()); }
     } else if (this.state === 'jump') {
-      this.jumpLeft -= dt;
+      this.jumpLeft -= k;
       if (this.jumpLeft <= 0) { this.state = 'run'; c.setFacing(this.runYaw()); }
     }
     // past an edge with a phone beyond it: hand him over (he keeps running off this screen). Only the phone that
@@ -199,7 +240,7 @@ export class Runner {
     if (P && P.mine && !this.handed && this.x * this.dir > edge && P.next(this.dir)) {
       this.handed = true;
       P.handoff(this.dir, {
-        dir: this.dir, pose: this.state, t: c.time, px: (this.x * this.dir - edge) * st.emPx, v: (c.speed || 0) * st.emPx,
+        dir: this.dir, pose: this.state, t: c.time, px: (this.x * this.dir - edge) * st.emPx, v: (c.speed || 0) * pace * st.emPx,
         sy: st.worldToCss(new THREE.Vector3(this.x, 0, this.lane)).y, H: st.cssH, h: this.y, facing: c.rig.facing.rotation.y,
         tripped: this.tripped,
       });

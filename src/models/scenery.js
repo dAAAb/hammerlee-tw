@@ -1127,6 +1127,198 @@ def('default', ['round', 'skyP'], (G, B) => {
   };
 });
 
+// ---------------------------------------------------------------- builds: things 川伯 worked on (fx/builds.js)
+// a toy car (forward +x), its own pop piece
+function toyCar(parent, name, pal, x, z, y = H0 + 0.06) {
+  const c = group(parent, name, x, y, z);
+  const p = piece(c, 0, 0, 0);
+  add(p, mesh(once('carBody', () => slab(0.82, 0.44, 0.24, 0.1)), pal), 0, 0.08, 0);
+  add(p, mesh(once('carCab', () => slab(0.44, 0.38, 0.2, 0.08)), 'glassB'), -0.06, 0.3, 0);
+  const wh = once('carWheel', () => discZ(0.09, 0.06, 12));
+  for (const wx of [-0.24, 0.24]) for (const wz of [-0.2, 0.2]) add(p, mesh(wh, 'rubber'), wx, 0.09, wz);
+  return c;
+}
+const winG = () => once('winS', () => boxG(0.22, 0.2, 0.04));
+
+// --- 天橋: a footbridge over the road outside a school, stair towers either side, a car passing under it
+def('overpass', ['round', 'skyP'], (G, B) => {
+  lay(B, bandInCircle(3.32, -0.05, 0.55), 0.1, 'walk');
+  lay(B, bandInCircle(3.32, 0.55, 1.75), 0.06, 'road');
+  lay(B, bandInCircle(3.32, 1.75, 2.35), 0.1, 'walk');
+  const dash = once('dashX', () => boxG(0.42, 0.02, 0.07));
+  for (const x of [-2.3, -1.3, -0.3, 0.7]) add(B, mesh(dash, 'white'), x, H0 + 0.06, 1.15);
+  // the school
+  const sc = piece(G, -0.55, -1.75);
+  add(sc, mesh(slab(3.2, 1.25, 1.45, 0.1), 'cream'));
+  add(sc, mesh(slab(3.36, 1.4, 0.12, 0.12), 'brick'), 0, 1.45, 0);
+  for (const y of [0.42, 0.95]) for (const x of [-1.25, -0.75, 0.75, 1.25]) add(sc, mesh(winG(), 'sky'), x, y, 0.63);
+  add(sc, mesh(boxG(0.7, 0.62, 0.04), 'navy'), 0, 0, 0.63);
+  add(sc, mesh(discZ(0.2, 0.06, 18), 'white'), 0, 1.12, 0.66);
+  add(sc, mesh(boxG(0.03, 0.15, 0.02), 'dark'), 0, 1.12, 0.7);
+  // the footbridge, spanning the road
+  const br = piece(G, 1.75, 1.15);
+  for (const z of [-0.98, 0.98]) {
+    add(br, mesh(slab(0.72, 0.5, 1.32, 0.06), 'yellow'), 0, 0, z);
+    for (let i = 0; i < 4; i++) add(br, mesh(once('stepB', () => boxG(0.74, 0.05, 0.1)), 'white'), 0, 0.3 + i * 0.28, z + (z > 0 ? 0.22 : -0.22));
+  }
+  add(br, mesh(slab(0.66, 2.5, 0.14, 0.05), 'navy'), 0, 1.32, 0);
+  for (const x of [-0.3, 0.3]) add(br, mesh(boxG(0.05, 0.3, 2.4), 'white'), x, 1.46, 0);
+  add(br, mesh(slab(0.82, 2.62, 0.06, 0.06), 'teal'), 0, 1.98, 0);
+  for (const x of [-0.36, 0.36]) for (const z of [-1.2, 0, 1.2]) add(br, mesh(once('postB', () => cylG(0.025, 0.025, 0.52, 6)), 'white'), x, 1.46, z);
+  tree(piece(G, -2.75, 2.05), 0, 0, 0.55, 'tc0');
+  tree(piece(G, 2.75, -0.35), 0, 0, 0.7, 'tc1');
+  toyCar(G, 'car', 'red', -2.6, 0.85);
+}, (o, list) => {
+  const car = o('car'), crowns = list('tc');
+  return t => {
+    const u = (t * 0.3) % 1;
+    car.position.x = -2.9 + 5.8 * u;
+    car.visible = u > 0.03 && u < 0.97;
+    crowns.forEach((c, i) => { c.rotation.z = 0.04 * Math.sin(t * 1.3 + i * 1.9); });
+  };
+});
+
+// --- 治水: a pumping station on the bank, big pipes pouring into the river, a floodgate that lifts and drops
+def('pump', ['square', 'mint'], (G, B) => {
+  lay(B, rrShape(5.6, 2.9, 0.4), 0.08, 'grass', 0, -1.6);
+  lay(B, rrShape(6.76, 0.4, 0.12), 0.22, 'concrete', 0, 0.95);
+  lay(B, rrShape(6.76, 2.0, 0.3), 0.06, 'water', 0, 2.25);
+  const st = piece(G, -1.0, -1.45);
+  add(st, mesh(slab(2.7, 1.55, 1.4, 0.1), 'concrete'));
+  add(st, mesh(slab(2.86, 1.7, 0.12, 0.12), 'blue'), 0, 1.4, 0);
+  add(st, mesh(boxG(0.95, 0.85, 0.04), 'navy'), -0.55, 0, 0.79);
+  for (const x of [0.35, 0.85]) add(st, mesh(winG(), 'sky'), x, 0.85, 0.79);
+  add(st, mesh(cylG(0.16, 0.16, 0.5, 12), 'metal'), 0.9, 1.5, -0.3);
+  const pp = piece(G, 0, 0);
+  [-1.65, -1.0, -0.35].forEach((x, i) => {
+    stroke(pp, [v3(x, 0.55, -0.7), v3(x, 0.95, 0.35), v3(x, 0.8, 1.15), v3(x, 0.45, 1.45)], 0.12, 'metal');
+    add(G, mesh(once('spout', () => ell(0.26, 0.08, 0.26, 14, 8)), 'white', 'spout' + i), x, H0 + 0.07, 1.62);
+  });
+  const fg = piece(G, 2.05, 1.05);
+  for (const sx of [-0.78, 0.78]) add(fg, mesh(slab(0.3, 0.42, 1.85, 0.05), 'concrete'), sx, 0, 0);
+  add(fg, mesh(slab(1.9, 0.48, 0.26, 0.05), 'concrete'), 0, 1.85, 0);
+  add(fg, mesh(slab(1.24, 0.16, 0.95, 0.04), 'blue', 'gate'), 0, 0.1, 0);
+  tree(piece(G, 1.9, -1.75), 0, 0, 0.95, 'tc0');
+  bush(piece(G, 2.8, -0.6), 0, 0, 1.1, 'grass2');
+}, (o, list) => {
+  const gate = o('gate'), sp = list('spout'), crowns = list('tc');
+  return t => {
+    gate.position.y = 0.1 + 0.6 * (0.5 + 0.5 * Math.sin(t * 0.8));
+    sp.forEach((s, i) => { const k = (t * 1.4 + i * 0.33) % 1; s.scale.set(0.7 + k * 0.8, 1 - 0.5 * k, 0.7 + k * 0.8); });
+    crowns.forEach((c, i) => { c.rotation.z = 0.04 * Math.sin(t * 1.2 + i * 2); });
+  };
+});
+
+// --- 小巨蛋: the Taipei Arena, a wide low dome on a ring of glass, a plaza with flags and a big screen
+def('arena', ['round', 'skyP'], (G, B) => {
+  lay(B, circleShape(3.25), 0.08, 'walk');
+  lay(B, ellipseShape(2.75, 2.0), 0.05, 'concrete', 0, -0.35, H0 + 0.08);
+  const ar = piece(G, 0, -0.45, H0 + 0.08);
+  const oval = geo => geo.scale(1, 1, 0.72);
+  add(ar, mesh(oval(cylG(2.35, 2.45, 0.5, 40)), 'navy'));
+  add(ar, mesh(oval(cylG(2.18, 2.22, 0.55, 40)), 'glassB'), 0, 0.5, 0);
+  add(ar, mesh(oval(ringG(2.24, 0.06, 40)), 'yellow', 'band'), 0, 0.52, 0);
+  add(ar, mesh(oval(dome(2.32, 0.95, 40)), 'white'), 0, 1.05, 0);
+  for (const r of [1.55, 0.85]) add(ar, mesh(oval(ringG(r, 0.035, 36)), 'metal'), 0, 1.05 + 0.95 * Math.sqrt(1 - (r / 2.32) ** 2), 0);
+  add(ar, mesh(slab(1.5, 0.55, 0.08, 0.1), 'white'), 0, 0.55, 1.62);
+  for (const s of [-1, 1]) add(ar, mesh(cylG(0.035, 0.035, 0.55, 8), 'white'), s * 0.62, 0, 1.82);
+  const sg = piece(G, 2.25, 1.7);
+  add(sg, mesh(cylG(0.05, 0.06, 0.95, 8), 'metal'));
+  add(sg, mesh(slab(0.95, 0.14, 0.62, 0.04), 'dark'), 0, 0.95, 0);
+  add(sg, mesh(boxG(0.8, 0.48, 0.03), 'glow', 'screen'), 0, 1.02, 0.07);
+  const fl = piece(G, -1.7, 2.15);
+  [-0.35, 0.35].forEach((x, i) => {
+    add(fl, mesh(cylG(0.025, 0.025, 1.3, 6), 'metal'), x, 0, 0);
+    const f = group(fl, 'flag' + i, x, 1.08, 0);
+    add(f, mesh(boxG(0.42, 0.22, 0.03), i ? 'teal' : 'yellow'), 0.21, 0, 0);
+  });
+  tree(piece(G, -2.65, 0.85), 0, 0, 0.7, 'tc0');
+}, (o, list) => {
+  const band = o('band'), screen = o('screen'), flags = list('flag'), crowns = list('tc');
+  const hot = mat('glowHot'), cool = mat('glow'), y = mat('yellow'), w = mat('white');
+  return t => {
+    band.material = Math.floor(t * 2) % 2 ? y : w;
+    screen.material = Math.sin(t * 2.2) > 0 ? hot : cool;
+    flags.forEach((f, i) => { f.rotation.y = 0.3 * Math.sin(t * 3 + i * 1.3); });
+    crowns.forEach((c, i) => { c.rotation.z = 0.04 * Math.sin(t * 1.3 + i); });
+  };
+});
+
+// --- 市府大樓: Taipei City Hall in the 信義計畫區 — a tall middle block, two wings, a plaza fountain, a flag
+def('cityhall', ['square', 'butter'], (G, B) => {
+  lay(B, rrShape(6.4, 3.0, 0.4), 0.08, 'walk', 0, 1.55);
+  lay(B, circleShape(0.78), 0.12, 'concrete', 0, 1.7);
+  lay(B, circleShape(0.62), 0.06, 'water', 0, 1.7, H0 + 0.12);
+  const hall = piece(G, 0, -1.45);
+  add(hall, mesh(slab(2.2, 1.6, 2.8, 0.08), 'paper'));
+  add(hall, mesh(slab(2.32, 1.72, 0.12, 0.1), 'navy'), 0, 2.8, 0);
+  for (const sx of [-1, 1]) {
+    add(hall, mesh(slab(1.5, 1.3, 1.9, 0.08), 'paper'), sx * 1.85, 0, 0.1);
+    add(hall, mesh(slab(1.6, 1.4, 0.1, 0.1), 'navy'), sx * 1.85, 1.9, 0.1);
+    for (const y of [0.55, 1.0, 1.45]) for (const x of [1.4, 1.85, 2.3]) add(hall, mesh(winG(), 'window'), sx * x, y, 0.77);
+  }
+  for (const y of [0.55, 1.0, 1.45, 1.9, 2.35]) for (const x of [-0.7, -0.35, 0.35, 0.7]) add(hall, mesh(winG(), 'window'), x, y, 0.81);
+  add(hall, mesh(boxG(0.5, 0.6, 0.04), 'glassB'), 0, 0, 0.81);
+  for (const x of [-0.4, -0.13, 0.13, 0.4]) add(hall, mesh(cylG(0.04, 0.04, 0.62, 8), 'white'), x, 0, 0.98);
+  add(hall, mesh(slab(1.1, 0.4, 0.07, 0.06), 'white'), 0, 0.62, 0.98);
+  const ft = piece(G, 0, 1.7, H0 + 0.12);
+  add(ft, mesh(cylG(0.07, 0.1, 0.32, 10), 'concrete'));
+  add(ft, mesh(ell(0.12, 0.3, 0.12, 12, 10), 'glowHot', 'jet'), 0, 0.42, 0);
+  const fp = piece(G, 2.5, 1.05);
+  add(fp, mesh(cylG(0.03, 0.035, 2.1, 8), 'metal'));
+  const fg = group(fp, 'flag', 0, 1.62, 0);
+  add(fg, mesh(boxG(0.6, 0.38, 0.03), 'red'), 0.3, 0, 0);
+  add(fg, mesh(boxG(0.3, 0.19, 0.035), 'navy'), 0.15, 0.19, 0);
+  tree(piece(G, -2.65, 2.45), 0, 0, 0.7, 'tc0');
+  tree(piece(G, 2.7, 2.65), 0, 0, 0.6, 'tc1');
+}, (o, list) => {
+  const jet = o('jet'), flag = o('flag'), crowns = list('tc');
+  return t => {
+    jet.scale.set(1, 0.8 + 0.3 * Math.sin(t * 5), 1);
+    flag.rotation.y = 0.25 * Math.sin(t * 2.4);
+    crowns.forEach((c, i) => { c.rotation.z = 0.04 * Math.sin(t * 1.3 + i * 1.5); });
+  };
+});
+
+// --- 公館路口: the old roundabout made a plain crossroads — zebra crossings, traffic lights, cars taking turns
+def('crossing', ['square', 'peach'], (G, B) => {
+  for (const sx of [-1, 1]) for (const sz of [-1, 1]) lay(B, rrShape(2.5, 2.5, 0.35), 0.1, 'walk', sx * 2.13, sz * 2.13);
+  lay(B, rrShape(6.76, 1.7, 0.15), 0.06, 'road');
+  lay(B, rrShape(1.7, 6.76, 0.15), 0.061, 'road');
+  const zb = once('zebra', () => boxG(0.13, 0.02, 0.55));
+  for (const s of [-1, 1]) for (let i = 0; i < 5; i++) {
+    const u = -0.56 + i * 0.28;
+    add(B, mesh(zb, 'white'), u, H0 + 0.062, s * 1.2).rotation.y = Math.PI / 2;
+    add(B, mesh(zb, 'white'), s * 1.2, H0 + 0.062, u);
+  }
+  [[1.1, 1.1, 'x'], [-1.1, -1.1, 'z']].forEach(([x, z, k]) => {
+    const tl = piece(G, x, z);
+    add(tl, mesh(cylG(0.04, 0.05, 1.2, 8), 'dark'));
+    add(tl, mesh(slab(0.3, 0.22, 0.62, 0.05), 'dark'), 0, 1.0, 0);
+    add(tl, mesh(once('lampR', () => discZ(0.08, 0.05, 12)), 'red', 'stop' + k), 0, 1.45, 0.12);
+    add(tl, mesh(once('lampG', () => discZ(0.08, 0.05, 12)), 'green', 'go' + k), 0, 1.18, 0.12);
+  });
+  tree(piece(G, 2.5, -2.4), 0, 0, 0.75, 'tc0');
+  tree(piece(G, -2.5, 2.45), 0, 0, 0.65, 'tc1');
+  toyCar(G, 'carx', 'blue', -2.6, 0.38);
+  const cz = toyCar(G, 'carz', 'yellow', -0.38, 2.6);
+  cz.rotation.y = Math.PI / 2;   // heading -z
+}, (o, list) => {
+  const sx = o('stopx'), gx = o('gox'), sz = o('stopz'), gz = o('goz'), cx = o('carx'), cz = o('carz'), crowns = list('tc');
+  const red = mat('red'), green = mat('green'), off = mat('dark');
+  // each car: 3 s waiting at its line, 3 s driving across while its light is green
+  const drive = (u, wait) => (u < 0.5 ? -3.0 + (wait + 3.0) * smooth(u / 0.5) : wait + (3.2 - wait) * ((u - 0.5) / 0.5));
+  return t => {
+    const xGo = (t % 6) >= 3, zGo = !xGo;
+    sx.material = xGo ? off : red; gx.material = xGo ? green : off;
+    sz.material = zGo ? off : red; gz.material = zGo ? green : off;
+    const ux = ((t + 0) % 6) / 6, uz = ((t + 3) % 6) / 6;
+    cx.position.x = drive(ux, -1.95); cx.visible = Math.abs(cx.position.x) < 3.05;
+    cz.position.z = -drive(uz, -1.95); cz.visible = Math.abs(cz.position.z) < 3.05;
+    crowns.forEach((c, i) => { c.rotation.z = 0.04 * Math.sin(t * 1.2 + i * 2); });
+  };
+});
+
 // ---------------------------------------------------------------- public API
 export const SCENERY_IDS = Object.keys(DEFS);
 

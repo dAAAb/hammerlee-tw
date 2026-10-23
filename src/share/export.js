@@ -1,5 +1,5 @@
 // The pictures people take away: the share card (1200 x 630, link-preview size), the long picture of the
-// whole conversation, and single stickers / the badge as square images.
+// whole conversation, single stickers / the badge as square images, and 川哥's builds as collectible cards.
 import * as THREE from 'three';
 import { layoutChat, columnWidth } from '../chat/layout.js';
 import { Builder } from '../chat/objects.js';
@@ -196,4 +196,38 @@ export async function longImage(stage, font, chat, builderOpts, { width = 900, o
   text(g, font, '11 月 28 日 新北的事 交給做過的人', 320, 236, 28, '#5d6f92');
   g.restore();
   return out;
+}
+
+// A build 川哥 made (fx/builds.js): the model on a card in its tier's colours, its name, what he did, and how
+// many kinds this phone has found. 900 x 1125 (4:5, what photo apps like).
+export function buildCard(stage, font, createScenery, b, tier, { have = 1, total = 1 } = {}) {
+  const W = 900, H = 1125;
+  const cv = document.createElement('canvas'); cv.width = W; cv.height = H;
+  const g = cv.getContext('2d');
+  g.fillStyle = tier.color; g.fillRect(0, 0, W, H);
+  g.fillStyle = '#fffdf6'; rr(g, 36, 36, W - 72, H - 72, 40); g.fill();
+  g.lineWidth = 8; g.strokeStyle = INK; g.stroke();
+  // the tier in a pill, and what this is
+  const tw = font.measure(b.tier, 84) + 70;
+  g.fillStyle = tier.color; rr(g, 74, 70, tw, 112, 56); g.fill(); g.lineWidth = 6; g.stroke();
+  text(g, font, b.tier, 74 + tw / 2, 156, 84, '#ffffff', { stroke: INK, strokeW: 10, align: 'center' });
+  text(g, font, '川哥的微縮建設', W - 78, 142, 42, NAVY, { align: 'right' });
+  // the model
+  const model = createScenery(b.model);
+  const pic = renderObject(stage, model, { w: 780, h: 600, view: 'iso', margin: 0.06, floor: [tier.light, '#ffffff'], t: 1.3 });
+  g.save(); rr(g, 60, 214, 780, 600, 30); g.clip(); g.drawImage(pic, 60, 214); g.restore();
+  g.lineWidth = 6; g.strokeStyle = INK; rr(g, 60, 214, 780, 600, 30); g.stroke();
+  // name, what he did
+  const nameSize = Math.min(60, 760 / Math.max(1, font.measure(b.name, 1)));
+  text(g, font, b.name, W / 2, 900, nameSize, INK, { align: 'center' });
+  const lines = [];
+  let cur = '';
+  for (const ch of b.note) {
+    if (cur && font.measure(cur + ch, 34) > 740) { lines.push(cur); cur = ch; } else cur += ch;
+  }
+  if (cur) lines.push(cur);
+  lines.slice(0, 3).forEach((l, i) => text(g, font, l, W / 2, 962 + i * 48, 34, '#4a5570', { align: 'center' }));
+  text(g, font, `圖鑑 ${have} / ${total}`, 80, H - 66, 30, NAVY);
+  text(g, font, 'hammerlee.tw 跟川伯聊天', W - 80, H - 66, 30, NAVY, { align: 'right' });
+  return cv;
 }

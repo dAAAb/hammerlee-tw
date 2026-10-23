@@ -13,10 +13,11 @@ import { TEXT_LAYER_CSS } from './ui/textlayer.js';
 import { SHEET_CSS, openSheet, button, linkButton, para, picture, placeholder, toast } from './ui/sheet.js';
 import { elderTexture, elderCanvas } from './share/elder.js';
 import { makeBadge, ensureEnvironment, shortId } from './models/badge.js';
-import { shareCard, longImage, badgeCanvas, stickerCanvas, renderSnippet, pickSnippet } from './share/export.js';
+import { shareCard, longImage, badgeCanvas, stickerCanvas, renderSnippet, pickSnippet, buildCard } from './share/export.js';
 import { saveFile, shareFiles, copyText, canvasBlob, shareUrl, lineShareLink, recordChat, uploadShareImage, attachShareImage, inArtifact } from './share/platform.js';
 import { burst } from './fx/confetti.js';
 import { Runner } from './fx/runner.js';
+import { Builds, BUILDS, TIERS, collection } from './fx/builds.js';
 import { play, setFeel, soundFor, canVibrate } from './fx/feel.js';
 import { Tilt } from './fx/tilt.js';
 import { SideScenery } from './fx/scenery-side.js';
@@ -70,6 +71,7 @@ const builderOpts = { photoAspect, loadPhoto, makeElder: id => elderTexture(font
 let confetti = null;
 let runner = null;
 let scenery = null;
+let builds = null;
 
 // viewer settings, remembered on this device only
 const SETTINGS_KEY = 'hl:settings';
@@ -105,11 +107,17 @@ const app = new App({
       recordChat({ id: chat.id, serial, topics: chat.topics, script: SCRIPT_VERSION });
       try { localStorage.setItem('hl:mine', chat.id); } catch (e) { /* private mode */ }
     },
-    frame(dt) { if (confetti && !confetti.update(dt)) confetti = null; runner?.update(dt); scenery?.update(dt); },
-    relayout() { scenery?.reset(); },
+    frame(dt) { if (confetti && !confetti.update(dt)) confetti = null; runner?.update(dt); builds?.update(dt); scenery?.update(dt); },
+    relayout() { scenery?.reset(); builds?.reset(); },
     topic() { runner?.topic(); },
     avatarTap() { runner?.summon(); },
-    tapExtra(rc, d, at) { return runner?.hit(rc, at) || false; },
+    tapExtra(rc, d, at) {
+      // 川哥 himself, then a build, then the finger-sized area around him
+      if (runner?.hit(rc)) return true;
+      const b = builds?.hit(rc);
+      if (b) { openBuild(b); return true; }
+      return runner?.hit(rc, at) || false;
+    },
     settings: openSettings,
     feel(it) { const n = soundFor(it); if (n) play(n); },
     key() { play('key'); },
@@ -117,9 +125,18 @@ const app = new App({
   },
 });
 const calm = matchMedia('(prefers-reduced-motion: reduce)').matches;
-runner = q.has('norunner') ? null : new Runner(app, createChuan, { calm, sfx: play });
+// 川哥's builds: a model rises beside him now and then; tap it for its card
+builds = new Builds(app, createScenery, {
+  onBuilt(s) {
+    const rare = s.b.tier === 'SSR' || s.b.tier === 'UR';
+    play(rare ? 'badge' : 'built');
+    if (rare) confetti = burst(stage.scene, new THREE.Vector3(s.x, 0, s.z), calm ? 20 : 60);
+    toast(`${s.count[s.b.id] === 1 ? '新！' : ''}川哥蓋好了${s.b.tier}「${s.b.name}」，點一下看看`, 3600);
+  },
+});
+runner = q.has('norunner') ? null : new Runner(app, createChuan, { calm, sfx: play, builds });
 scenery = new SideScenery(app, createScenery);
-if (q.has('debug')) window.__runner = runner;
+if (q.has('debug')) { window.__runner = runner; window.__builds = builds; }
 
 // 多支手機一起玩 (實驗功能): off by default. Nothing is set up, and nothing connects, until it is turned on in 設定
 // and someone presses 顯示配對碼 / 輸入配對碼, or says yes to the invitation a scanned QR code opens.
@@ -134,7 +151,7 @@ function getPair() {
 }
 window.__app = app;
 if (q.has('at')) app.jumpTo(+q.get('at'));
-if (q.has('debug')) window.__hl = { stage, font, chat, builderOpts, shareCard, longImage, badgeCanvas, stickerCanvas, renderSnippet, pickSnippet };
+if (q.has('debug')) window.__hl = { stage, font, chat, builderOpts, shareCard, longImage, badgeCanvas, stickerCanvas, renderSnippet, pickSnippet, buildCard, createScenery, BUILDS, TIERS };
 
 // ---------------------------------------------------------------------------------------------------
 // copying from the selectable text layer: one message per line, emoji as real emoji
@@ -191,6 +208,15 @@ function viewer({ title, canvas, src, filename, alt, shareText }) {
 }
 
 const safeName = s => s.replace(/[\\/:*?"<>|！～…]/g, '');
+
+function openBuild(s) {
+  const have = Object.keys(collection()).filter(id => BUILDS.some(b => b.id === id)).length;
+  viewer({
+    title: `${s.b.tier}｜${s.b.name}`, canvas: buildCard(stage, font, createScenery, s.b, TIERS[s.b.tier], { have, total: BUILDS.length }),
+    filename: safeName(`川哥的微縮建設-${s.b.name}.png`), alt: `川哥蓋的微縮模型：${s.b.name}`,
+    shareText: `川哥幫我蓋了「${s.b.name}」（${s.b.tier}）！你也來跟川伯聊天`,
+  });
+}
 
 function onTap(h) {
   switch (h.type) {
@@ -306,7 +332,7 @@ function openSettings() {
       pairBox.replaceChildren();
       if (settings.pair) pairBox.append(button(pair && pair.phase !== 'idle' ? '配對狀態／結束配對' : '開始配對', () => openPairSheet(getPair()), 'main'));
     };
-    sheet.append(toggle('多支手機一起玩', `把 2～${MAX_PHONES} 支手機排成一排平放，小川哥會從一支跑到下一支。打開以後，要按「開始配對」才會連線。`, settings.pair, v => {
+    sheet.append(toggle('多支手機一起玩', `把 2～${MAX_PHONES} 支手機排好平放，小川哥會從一支跑到下一支，手機越多跑越快。打開以後，要按「開始配對」才會連線。`, settings.pair, v => {
       if (v && !pairTransport) { toast('這裡不能用，請到 hammerlee.tw 試試'); return false; }
       settings.pair = v; saveSettings();
       if (!v) pair?.end('off');
@@ -325,9 +351,9 @@ function openSettings() {
       <a href="https://portaly.cc/hammerlee" target="_blank" rel="noopener">李四川官方 Portaly</a>。</p>
       <h3>隱私</h3>
       <p>不需要登入，也不會要你輸入任何資料。對話結束時，只會記錄這段對話的編號、聊到的話題和時間，用來讓分享連結顯示預覽圖；
-      設定只存在你自己的手機裡。立體視角只在你的手機上計算，不會傳出去。</p>
+      設定只存在你自己的手機裡。立體視角只在你的手機上計算，不會傳出去。小川哥蓋的微縮建設圖鑑也只記在你的手機裡。</p>
       <p>「多支手機一起玩」是實驗功能，預設是關的。只有你打開它、按下配對以後才會連線：手機之間透過 Supabase 的即時訊息服務，
-      只傳一組臨時的四位數配對碼、每支手機排在哪裡（左右哪一邊、手指滑過的高度），和小川哥跑到哪裡、跑多快。
+      只傳一組臨時的六位數配對碼、每支手機的號碼和排在哪裡（左右哪一邊、手指滑過的高度），和小川哥跑到哪裡、跑多快。
       不會用到你的位置（GPS）或藍牙，不會傳任何個人資料，也不會存進資料庫。結束配對或關掉網頁，連線就斷了。</p>
       <h3>開源授權與致謝</h3>
       <ul>

@@ -42,6 +42,7 @@ export const SHEET_CSS = `
 .about ul { padding-left: 22px; margin: 6px 0; }
 .about a { color: var(--blue); }
 .toast { position: fixed; left: 50%; bottom: calc(120px + env(safe-area-inset-bottom, 0px)); transform: translateX(-50%); z-index: 30;
+  width: max-content; max-width: calc(100vw - 40px); box-sizing: border-box; text-align: center;
   background: var(--ink); color: #fff; font: 600 20px/1.3 var(--ui-font); padding: 12px 20px; border-radius: 999px; animation: sheetFade .2s; }
 @keyframes sheetUp { from { transform: translateY(40%); opacity: .4 } to { transform: none; opacity: 1 } }
 @keyframes sheetFade { from { opacity: 0 } to { opacity: 1 } }

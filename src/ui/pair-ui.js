@@ -3,16 +3,20 @@
 // the seams, and a small chip that says the phones are linked (tap it to end). Big words, one clear action.
 import { encode } from 'uqr';
 import { openSheet, closeSheet, button, para, toast } from './sheet.js';
-import { pairLink, isPairCode, MAX_PHONES } from '../net/pair.js';
+import { pairLink, isPairCode, MAX_PHONES, BIG_ROOM } from '../net/pair.js';
 
 export const PAIR_CSS = `
 .pair-info { margin: 10px 4px 4px; padding: 12px 14px; border: 2px dashed #c9bfa6; border-radius: 14px; background: #fff8e0; font-size: 17px; line-height: 1.6; }
 .pair-info b { color: var(--navy); }
-.pair-code { font: 700 64px/1.1 ui-monospace, Menlo, monospace; letter-spacing: .18em; text-align: center; color: var(--navy); margin: 6px 0 4px; }
+.pair-code { font: 700 54px/1.1 ui-monospace, Menlo, monospace; letter-spacing: .08em; text-align: center; color: var(--navy); margin: 6px 0 4px; white-space: nowrap; }
+.pair-num { display: block; width: fit-content; margin: 2px auto 10px; padding: 4px 22px; border: 3px solid var(--ink); border-radius: 999px; background: var(--yellow);
+  font: 700 34px/1.25 var(--ui-font); color: var(--ink); box-shadow: 3px 3px 0 var(--ink); }
+.pair-step { display: flex; align-items: center; justify-content: center; gap: 14px; margin: 6px 0 4px; font-size: 22px; font-weight: 700; }
+.sheet .pair-step button { min-width: 64px; min-height: 56px; font-size: 30px; padding: 0; }
 .pair-qr { display: block; width: 210px; height: 210px; margin: 6px auto 10px; border: 3px solid var(--ink); border-radius: 14px; background: #fff; image-rendering: pixelated; }
 .pair-wait { text-align: center; font-size: 18px; color: #5d6f92; }
 .pair-wait::after { content: '…'; display: inline-block; animation: pairDots 1.2s steps(4) infinite; width: 1.2em; text-align: left; overflow: hidden; vertical-align: bottom; }
-.sheet input.pair-in { display: block; width: 100%; box-sizing: border-box; font: 700 48px/1.2 ui-monospace, Menlo, monospace; letter-spacing: .3em; text-align: center;
+.sheet input.pair-in { display: block; width: 100%; box-sizing: border-box; font: 700 44px/1.2 ui-monospace, Menlo, monospace; letter-spacing: .2em; text-align: center;
   padding: 10px 0 10px .3em; border: 3px solid var(--ink); border-radius: 18px; background: #fff; color: var(--ink); }
 .sheet input.pair-in:focus-visible { outline: 4px solid var(--blue); outline-offset: 2px; }
 .pair-err { color: #c0392b; font-weight: 700; min-height: 1.5em; }
@@ -44,7 +48,7 @@ const SIDE = { '-1': '左邊', 1: '右邊' };
 // what is shared, said plainly (the settings sheet and the pairing sheet both show it)
 export function pairInfo() {
   const d = document.createElement('div'); d.className = 'pair-info';
-  d.innerHTML = '這是<b>實驗功能</b>，可能不太穩定。手機之間只會傳：一組<b>臨時的四位數配對碼</b>、<b>手機排在哪裡</b>，和<b>小川哥在畫面上跑到哪裡</b>。'
+  d.innerHTML = '這是<b>實驗功能</b>，可能不太穩定。手機之間只會傳：一組<b>臨時的六位數配對碼</b>、<b>手機的號碼和排在哪裡</b>，和<b>小川哥在畫面上跑到哪裡</b>。'
     + '不會用到你的位置（GPS）或藍牙，也不會傳任何個人資料，什麼都不會存下來。';
   return d;
 }
@@ -63,6 +67,16 @@ function qrCanvas(text) {
   cv.setAttribute('aria-label', 'QR 碼：用另一支手機的相機掃描');
   return cv;
 }
+
+const spaced = code => `${code.slice(0, 3)} ${code.slice(3)}`;
+// "第 2 排第 3 支" / "從左邊數第 3 支" for this phone, once the room is put together
+function whereAmI(pair) {
+  const c = pair.cells.get(pair.key), i = pair.row().indexOf(pair.key) + 1;
+  if (!c || pair.rowCount < 2) return `從左邊數第 ${i} 支`;
+  const top = Math.min(...pair.members.filter(k => pair.groups.get(k) === pair.groups.get(pair.key)).map(k => pair.cells.get(k)[1]));
+  return `第 ${c[1] - top + 1} 排、從左邊數第 ${i} 支`;
+}
+const numBadge = pair => { const d = document.createElement('div'); d.className = 'pair-num'; d.textContent = `你是 ${pair.number} 號`; return d; };
 
 const acts = (...bs) => { const a = document.createElement('div'); a.className = 'acts'; a.append(...bs); return a; };
 
@@ -85,7 +99,7 @@ export function openPairSheet(pair, { view = null } = {}) {
       body.append(para(`請拿其他手機（最多再 ${MAX_PHONES - 1} 支），也打開「跟川伯聊天」：`));
       body.append(para('① 用相機掃這個 QR 碼'), qrCanvas(pairLink(pair.code)));
       body.append(para('② 或在那支手機按左下角的齒輪（設定），打開「多支手機一起玩」，按「開始配對」→「我要輸入配對碼」，輸入：'));
-      const c = document.createElement('div'); c.className = 'pair-code'; c.textContent = pair.code;
+      const c = document.createElement('div'); c.className = 'pair-code'; c.textContent = spaced(pair.code);
       c.setAttribute('aria-label', `配對碼 ${[...pair.code].join(' ')}`);
       body.append(c, para('等其他手機加入中', 'pair-wait'));
       body.append(acts(button('取消配對', () => { pair.end('cancel'); closeSheet(); })));
@@ -93,14 +107,14 @@ export function openPairSheet(pair, { view = null } = {}) {
       body.append(para(`正在連到配對碼 ${pair.code}`, 'pair-wait'));
       body.append(acts(button('取消', () => { pair.end('cancel'); local = 'enter'; draw(); })));
     } else if (ph === 'linked' || ph === 'lost') {
-      const i = pair.row().indexOf(pair.key) + 1;
-      body.append(para(ph === 'lost' ? '顯示配對碼的那支手機好像斷線了，等它回來。一直沒回來的話，配對會自動結束。'
-        : !pair.complete ? '連上了！請照畫面上的說明，把手機排好、滑一下。'
+      if (n > 2) body.append(numBadge(pair));
+      body.append(para(ph === 'lost' ? '主手機好像斷線了，等它回來。一直沒回來的話，由號碼最小的手機接手。'
+        : !pair.complete ? '連上了！請照畫面上的說明，把手機排好。'
           : n === 2 ? `已經跟另一支手機配對好了，它在這支手機的${SIDE[pair.side]}。小川哥會在兩支手機之間跑來跑去。`
-            : `${n} 支手機排好了，這支是從左邊數第 ${i} 支。小川哥會從一端跑到另一端，再跑回來。`));
+            : `${n} 支手機排好了，這支在${whereAmI(pair)}。每一排都有一個小川哥，從一端跑到另一端再跑回來。`));
       if (pair.anyAway) body.append(para('有手機斷線或收起來了，小川哥會先跳過它。'));
       if (n < MAX_PHONES && ph === 'linked') {
-        body.append(para(`還可以再加 ${MAX_PHONES - n} 支：用那支手機的相機掃 QR 碼，或在那支手機輸入配對碼 ${pair.code}。`), qrCanvas(pairLink(pair.code)));
+        body.append(para(`還可以再加 ${MAX_PHONES - n} 支：用那支手機的相機掃 QR 碼，或在那支手機輸入配對碼 ${spaced(pair.code)}。`), qrCanvas(pairLink(pair.code)));
       }
       body.append(acts(
         button('重新排一次', () => { closeSheet(); pair.startOver(); }),
@@ -108,28 +122,28 @@ export function openPairSheet(pair, { view = null } = {}) {
       ));
     } else if (local === 'enter') {
       const l = document.createElement('label'); l.htmlFor = 'pair-in';
-      l.append(para('請輸入另一支手機上顯示的四位數配對碼：'));
+      l.append(para('請輸入另一支手機上顯示的六位數配對碼：'));
       const inp = document.createElement('input');
-      Object.assign(inp, { id: 'pair-in', className: 'pair-in', inputMode: 'numeric', autocomplete: 'off', maxLength: 4, pattern: '[0-9]*', enterKeyHint: 'go' });
+      Object.assign(inp, { id: 'pair-in', className: 'pair-in', inputMode: 'numeric', autocomplete: 'off', maxLength: 6, pattern: '[0-9]*', enterKeyHint: 'go' });
       inp.setAttribute('aria-describedby', 'pair-err');
       inp.value = typed;
       const e = para(err, 'pair-err'); e.id = 'pair-err'; e.setAttribute('role', 'alert');
       const go = () => {
         const code = inp.value.replace(/\D/g, '');
-        if (!isPairCode(code)) { err = '請輸入四個數字'; e.textContent = err; inp.focus(); return; }
+        if (!isPairCode(code)) { err = '請輸入六個數字'; e.textContent = err; inp.focus(); return; }
         err = ''; typed = code; pair.join(code);
       };
       inp.addEventListener('input', () => {
-        inp.value = inp.value.replace(/\D/g, '').slice(0, 4);
+        inp.value = inp.value.replace(/\D/g, '').slice(0, 6);
         e.textContent = '';
-        if (inp.value.length === 4) go();
+        if (inp.value.length === 6) go();
       });
       inp.addEventListener('keydown', ev => { if (ev.key === 'Enter') go(); });
       body.append(l, inp, e, acts(button('連線', go, 'main')));
       setTimeout(() => inp.focus(), 60);
     } else {
       if (err) body.append(para(err, 'pair-err'));
-      body.append(para(`把 2～${MAX_PHONES} 支手機排成一排平放在桌上，小川哥會從一支跑到下一支，跑到最旁邊再跑回來。`));
+      body.append(para(`把 2～${MAX_PHONES} 支手機排好平放在桌上，小川哥會從一支跑到下一支，跑到最旁邊再跑回來。手機越多，他跑得越快！`));
       body.append(para('每支手機都要打開「跟川伯聊天」。先讓其中一支顯示配對碼，其他手機再輸入或掃描它。'));
       body.append(acts(
         button('這支手機顯示配對碼', () => pair.host(), 'main'),
@@ -220,26 +234,41 @@ export function calibrate(pair) {
     const n = pair.count, h = document.createElement('h2');
     if (pair.complete) {
       done = true;
-      const i = pair.row().indexOf(pair.key) + 1;
       h.textContent = '排好了';
-      card.replaceChildren(h, para(n === 2 ? `好了！另一支手機在${SIDE[pair.side]}。` : `好了！這支是從左邊數第 ${i} 支（共 ${n} 支）。`, 'ok'),
+      card.replaceChildren(h, para(n === 2 ? `好了！另一支手機在${SIDE[pair.side]}。` : `好了！你是 ${pair.number} 號，在${whereAmI(pair)}（共 ${n} 支）。`, 'ok'),
         para('小川哥等一下就會跑過來跑過去。'));
-      setTimeout(close, 1400);
+      setTimeout(close, 1600);
       return;
     }
-    h.textContent = n > 2 ? '把手機排成一排' : '連上了！';
+    const big = n >= BIG_ROOM;
+    h.textContent = big ? '照號碼排好手機' : n > 2 ? '把手機排成一排' : '連上了！';
     const parts = [h];
-    if (n > 2) {
+    if (n > 2) parts.push(numBadge(pair));
+    if (big) {
+      const cols = pair.cols || pair.defaultCols(), hostNo = pair.nums.get(pair.hostKey) || 1;
+      parts.push(para(`現在有 ${n} 支手機。請照每支手機上的號碼，從左到右、一排一排排好：每排 ${cols} 支，1 號在左上角。`));
+      if (pair.isHost) {
+        const step = document.createElement('div'); step.className = 'pair-step';
+        const lbl = document.createElement('span'); lbl.textContent = `每排 ${cols} 支`;
+        step.append(button('－', () => pair.setCols(cols - 1)), lbl, button('＋', () => pair.setCols(cols + 1)));
+        parts.push(step, acts(button('排好了，開始！', () => pair.arrange(), 'main')));
+      } else {
+        parts.push(para(`排好以後，等 ${hostNo} 號（主手機）按「排好了」。`, 'progress'));
+      }
+      parts.push(status);
+    } else if (n > 2) {
       parts.push(para(`現在有 ${n} 支手機。由左到右排成一排平放，用一根手指從最左邊那支一路滑到最右邊那支（也可以一次滑一個接縫）。`));
       const linked = n - new Set(pair.members.map(k => pair.groups.get(k))).size;
       if (linked) parts.push(para(`已經接好 ${linked} 個接縫，還差 ${n - 1 - linked} 個。`, 'progress'));
     } else {
       parts.push(para('把兩支手機並排放好，用一根手指，從這支手機一路滑到另一支手機上。'));
     }
-    const hint = document.createElement('div'); hint.className = 'pair-swipe'; hint.setAttribute('aria-hidden', 'true');
-    parts.push(hint, status);
-    if (pair.phase === 'lost') status.textContent = '顯示配對碼的那支手機斷線了，等它回來…';
-    if (n > 2) {
+    if (!big) {
+      const hint = document.createElement('div'); hint.className = 'pair-swipe'; hint.setAttribute('aria-hidden', 'true');
+      parts.push(hint, status);
+    }
+    if (pair.phase === 'lost') status.textContent = '主手機斷線了，等它回來…';
+    if (big) { /* lined up by number */ } else if (n > 2) {
       const i = pair.queued.indexOf(pair.key);
       if (i >= 0) parts.push(para(`這支排第 ${i + 1} 支。請在右邊下一支手機點「點我排隊」。`, 'progress'));
       else {
@@ -251,15 +280,15 @@ export function calibrate(pair) {
       two.append(button('◀ 在左邊', () => side(-1)), button('在右邊 ▶', () => side(1)));
       parts.push(para('滑不過去也沒關係，直接點另一支手機在這支的哪一邊：'), two);
     }
-    if (n < MAX_PHONES) parts.push(para(`還有手機要加入？在那支手機輸入配對碼 ${pair.code}（最多 ${MAX_PHONES} 支）。`, 'more'));
+    if (n < MAX_PHONES && (!big || pair.isHost)) parts.push(para(`還有手機要加入？在那支手機輸入配對碼 ${spaced(pair.code)}（最多 ${MAX_PHONES} 支）。`, 'more'));
     const bye = button('結束配對', () => pair.end('user'), 'close');
-    if (n > 2 && (pair.links.length || pair.queued.length)) {
+    if (n > 2 && !big && (pair.links.length || pair.queued.length)) {
       const two = document.createElement('div'); two.className = 'acts two';
       two.append(button('全部重新排', () => pair.startOver()), bye);
       parts.push(two);
     } else parts.push(bye);
     card.replaceChildren(...parts);
-    if (first) { first = false; setTimeout(() => card.querySelector('button')?.focus(), 50); }
+    if (first) { first = false; setTimeout(() => card.querySelector('button')?.focus({ preventScroll: true }), 50); }
   }
   function close() {
     off(); if (cal === root) cal = null; root.remove();
@@ -283,7 +312,7 @@ export function pairChip(pair, { top }) {
     chip.hidden = !(ph === 'linked' || ph === 'lost');
     chip.classList.toggle('lost', ph === 'lost' || gone);
     chip.textContent = ph === 'lost' ? '主手機斷線了…' : gone ? '有一支手機斷線了…' : resting ? '有手機收起來了'
-      : n === 2 ? '兩支手機連線中' : `${n} 支手機連線中`;
+      : n === 2 ? '兩支手機連線中' : `${n} 支手機連線中・${pair.number} 號`;
     chip.style.top = `${Math.round(top()) + 8}px`;
     if (ph === 'linked' && !pair.complete) calibrate(pair);
     if (ph === 'idle' && REASONS[why] && !document.querySelector('.pair-sheet')) toast(REASONS[why], 3600);

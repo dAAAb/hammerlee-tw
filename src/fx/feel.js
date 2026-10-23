@@ -52,9 +52,13 @@ const SOUNDS = {
   key(t) { noise(t, 0.025, { gain: 0.035, freq: 5200, q: 2 }); },
   bonk(t) { tone(160, t, 0.2, { gain: 0.2, slide: 0.6, type: 'triangle' }); noise(t, 0.08, { gain: 0.06, freq: 600 }); },
   boing(t) { tone(280, t, 0.28, { gain: 0.14, slide: 2.4, type: 'triangle' }); },
+  // 川哥 digs and hammers at a build
+  dig(t) { [0, 0.42, 0.84].forEach(d => { tone(190, t + d, 0.12, { gain: 0.14, slide: 0.7, type: 'triangle' }); noise(t + d, 0.06, { gain: 0.07, freq: 900 }); }); },
+  // a build is done: a bright little run up
+  built(t) { [784, 988, 1175, 1568].forEach((f, i) => tone(f, t + i * 0.07, 0.25, { gain: 0.1, type: i % 2 ? 'triangle' : 'sine' })); },
 };
 
-const BUZZ = { incoming: 18, sent: 10, sticker: [12, 40, 12], photo: 14, badge: [20, 60, 20, 60, 40], bonk: 30, boing: 12 };
+const BUZZ = { incoming: 18, sent: 10, sticker: [12, 40, 12], photo: 14, badge: [20, 60, 20, 60, 40], bonk: 30, boing: 12, dig: [12, 400, 12, 400, 12], built: [20, 50, 30] };
 
 let lastKey = 0;
 export function play(name) {

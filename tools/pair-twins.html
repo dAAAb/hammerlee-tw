@@ -1,19 +1,23 @@
 <!doctype html><meta charset="utf-8"><title>多支手機一起玩：測試</title>
-<!-- 2–4 "phones" side by side on one screen, for 多支手機一起玩 (實驗功能). Copy next to the build and open it:
-       cp tools/pair-twins.html dist/ && npm run serve   ->  http://localhost:5173/pair-twins.html?phones=3
-     Other query flags pass through to every phone: ?realtime (go through Supabase Realtime), ?lag=150 (slow local link). -->
+<!-- 2–12 "phones" on one screen, for 多支手機一起玩 (實驗功能). Copy next to the build and open it:
+       cp tools/pair-twins.html dist/ && npm run serve   ->  http://localhost:5173/pair-twins.html?phones=8&cols=4
+     ?cols= phones per row (default all in one row), ?w= / ?h= phone size in px. Other query flags pass through to
+     every phone: ?realtime (go through Supabase Realtime), ?lag=150 (slow local link). -->
 <style>
 html, body { margin: 0; height: 100%; background: #2b2b2b; }
-body { display: flex; gap: 18px; justify-content: center; align-items: center; }
-iframe { width: 340px; height: 680px; max-height: 96vh; border: 0; border-radius: 18px; background: #a9c6ea; flex: none; }
+body { display: grid; gap: 18px; justify-content: center; align-content: center; padding: 18px; box-sizing: border-box; }
+iframe { border: 0; border-radius: 18px; background: #a9c6ea; }
 </style>
 <body>
 <script>
-const q = new URLSearchParams(location.search), n = Math.min(4, Math.max(2, +q.get('phones') || 2));
-q.delete('phones');
+const q = new URLSearchParams(location.search), n = Math.min(12, Math.max(2, +q.get('phones') || 2));
+const cols = +q.get('cols') || n, w = +q.get('w') || 340, h = +q.get('h') || 680;
+for (const k of ['phones', 'cols', 'w', 'h']) q.delete(k);
+document.body.style.gridTemplateColumns = `repeat(${cols}, ${w}px)`;
 for (let i = 0; i < n; i++) {
   const f = document.createElement('iframe');
-  f.title = '手機 ' + 'ABCD'[i];
+  f.title = '手機 ' + (i + 1);
+  f.style.width = w + 'px'; f.style.height = h + 'px';
   f.src = 'index.html?nointro&debug' + (q.size ? '&' + q : '');
   document.body.append(f);
 }

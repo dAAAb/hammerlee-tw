@@ -1,24 +1,30 @@
-// 多支手機一起玩 (an opt-in 實驗功能): 2–4 phones lie in a row and mini 川哥 runs off one screen onto the next,
-// to the far end of the row and back.
+// 多支手機一起玩 (an opt-in 實驗功能): 2–52 phones lie in rows and mini 川哥 runs off one screen onto the next, to
+// the end of the row and back, faster the bigger the room.
 //
-// Pairing: one phone shows a 4-digit room code (and a QR code of a link that carries it); the others type the
-// code or scan the QR. All join one Realtime channel named after the code. The phone that showed the code is the
-// host and keeps the room: it lets phones in (knock → welcome), works out how they lie, and tells everyone
-// (layout). If the host leaves, the room ends.
+// Pairing: one phone shows a 6-digit room code (and a QR code of a link that carries it); the others type the code
+// or scan the QR. All join one Realtime room named after the code. The phone that showed the code is the host and
+// keeps the room: it lets phones in (knock → welcome) and gives each a number, works out how they lie, and tells
+// everyone (layout). If the host leaves, the phone with the smallest number takes over.
 //
-// How they lie: a finger swiped from one screen onto the next runs off the first at an edge ('out') and onto the
-// second at the facing edge ('in') a moment later. Every phone reports its edges, timed on the host's clock (the
-// offset comes from the quickest ping), and the host pairs each 'out' with the nearest 'in' into a link: "B lies
-// on A's right, and the seam is at height sa on A and sb on B". A lone edge counts when only one phone can be
-// there; or people tap 點我排隊 on each phone from left to right. Links are kept per edge (l r u d) and every
-// phone gets a grid cell, so phones above and below can be added later; this version only makes left/right links.
+// How they lie, three ways:
+//  - a swipe from one screen onto the next runs off the first at an edge ('out') and onto the second at the facing
+//    edge ('in') a moment later. Every phone reports its edges timed on the host's clock (offset from the quickest
+//    ping) and the host pairs each 'out' with the nearest 'in' into a link: "B lies on A's right, the seam is at
+//    height sa on A and sb on B". A lone edge counts when only one phone can be there.
+//  - 點我排隊: people tap each phone from left to right.
+//  - by number: people put the phones in number order, rows of `cols`, and the host presses 排好了 (big rooms).
+// Links are kept per edge (l r u d) and every phone gets a grid cell; 川哥 runs along each row (left/right links),
+// one 川哥 per row.
 //
-// Running: one phone holds 川哥 at a time (`mine`). When he runs past an edge with a phone beyond it, this phone
-// sends that phone his state (pose, speed, height on screen, facing) and it lets him run in from its own edge.
-// At the end of the row he runs off, and a little later comes back the other way.
+// Running: in each row one phone holds 川哥 (`mine`). When he runs past an edge with a phone beyond it, this phone
+// sends that phone his state (pose, speed, height on screen, facing) straight to its inbox, and it lets him run in
+// from its own edge. At the end of the row he runs off, and a little later comes back the other way.
 //
-// What travels: the room code (as the channel name), a random id per visit, the edges and seam heights of a
-// swipe, and 川哥's position. No location, no personal data, nothing stored in a table.
+// Builds (fx/builds.js): now and then 川哥 stops and builds a little model. In a room only a few "lucky" phones,
+// drawn by the host, can get one, and less often the bigger the room.
+//
+// What travels: the room code (as the room's name), a random id and a number per visit, the edges and seam heights
+// of a swipe, and 川哥's position. No location, no personal data, nothing stored in a table.
 // Nothing here runs, and no connection opens, until someone presses 顯示配對碼 or 輸入配對碼.
 import { openChannel } from './realtime.js';
 import { CONFIG, onPublicSite } from '../config.js';
@@ -29,8 +35,10 @@ const q = new URLSearchParams(location.search);
 export const pairTransport = onPublicSite || q.has('realtime') ? 'realtime'
   : /^(localhost|127\.0\.0\.1|\[::1\])$/.test(location.hostname) ? 'local' : null;
 
-export const MAX_PHONES = 4;
-export const isPairCode = s => /^\d{4}$/.test(s);
+export const MAX_PHONES = 52;
+export const BIG_ROOM = 7;        // from this many phones, line them up by number
+const LUCKY = 3;                  // phones that can get a build in a room
+export const isPairCode = s => /^\d{6}$/.test(s);
 
 // the link inside the QR code: opening it on another phone offers to join this room
 export function pairLink(code) {
@@ -43,7 +51,7 @@ const STEP = { l: [-1, 0], r: [1, 0], u: [0, -1], d: [0, 1] };
 const OPP = { l: 'r', r: 'l', u: 'd', d: 'u' };
 export const edgeOf = dir => (dir > 0 ? 'r' : 'l');
 
-const WAIT_HOST = 5 * 60e3;   // a shown code stays open this long
+const WAIT_HOST = 10 * 60e3;  // a shown code stays open this long with nobody joining
 const KNOCKS = 7;             // a joining phone asks this many times, 1.2 s apart, before giving up
 const GRACE = 25e3;           // a phone that drops off gets this long to come back
 const newKey = () => Math.random().toString(36).slice(2, 10);
@@ -82,18 +90,23 @@ export class Pair {
   }
 
   reset() {
-    this.members = [];          // everyone in the room, host first (the host's word)
+    this.members = [];          // everyone in the room (the host's word)
+    this.nums = new Map();      // key -> the number the host gave it (the host is 1)
+    this.counter = 0;
     this.links = [];            // { a, e, b, sa, sb }: b lies on a's edge e ('r' or 'd'); the seam is at sa on a, sb on b
     this.cells = new Map(); this.groups = new Map();
+    this.cols = 0;              // by number: phones per row (0: the host hasn't said)
     this.queued = [];           // 點我排隊, left to right
     this.pend = [];             // host: swipe edges not yet paired
+    this.holders = new Set();   // the phone holding 川哥 in each row (the host's word, kept up to date by 'got')
+    this.lucky = new Set();     // phones that can get a build
     this.mine = false;          // 川哥's next run starts on this phone
-    this.holder = null;
     this.hidden = new Set();    // phones put away
     this.gone = new Set();      // phones whose line dropped
     this.seen = new Set();
     this.graces = new Map();
-    this.rtt = new Map();       // key -> seconds
+    this.rtt = new Map();       // host: key -> seconds, as each guest measured it
+    this.rttHost = 0.25;        // guest: seconds to the host and back
     this.offset = 0;            // host clock - this clock (ms), from the quickest ping
     this.best = Infinity;
     this.hostKey = null;
@@ -128,14 +141,27 @@ export class Pair {
   }
   away(k) { return this.hidden.has(k) || this.gone.has(k); }
   place() { ({ cells: this.cells, groups: this.groups } = placeAll(this.members, this.links)); }
-  // every phone in the room is linked into one row
+  // every phone in the room is linked into one arrangement
   get complete() { return this.members.length >= 2 && new Set(this.members.map(k => this.groups.get(k))).size === 1; }
   get count() { return this.members.length; }
-  // the phones linked with this one, left to right
+  get number() { return this.nums.get(this.key) || 0; }
+  get isHost() { return this.role === 'host'; }
+  // the row a phone is in (same group, same grid row), left to right
   row(key = this.key) {
-    const g = this.groups.get(key);
-    return this.members.filter(k => this.groups.get(k) === g).sort((p, r) => this.cells.get(p)[0] - this.cells.get(r)[0]);
+    const g = this.groups.get(key), y = this.cells.get(key)?.[1];
+    return this.members.filter(k => this.groups.get(k) === g && this.cells.get(k)?.[1] === y)
+      .sort((p, r) => this.cells.get(p)[0] - this.cells.get(r)[0]);
   }
+  rows() {
+    const out = new Map();
+    for (const k of this.members) {
+      const id = `${this.groups.get(k)}:${this.cells.get(k)?.[1]}`;
+      if (!out.has(id)) out.set(id, this.row(k));
+    }
+    return [...out.values()];
+  }
+  // rows, top to bottom, of the arrangement this phone is in
+  get rowCount() { return new Set(this.members.filter(k => this.groups.get(k) === this.groups.get(this.key)).map(k => this.cells.get(k)[1])).size; }
   // where the one other phone lies (for the two-phone wording): -1 left, 1 right, 0 not yet known
   get side() { return this.neighbor(this.key, 'r') ? 1 : this.neighbor(this.key, 'l') ? -1 : 0; }
   get anyAway() { return this.members.some(k => k !== this.key && this.away(k)); }
@@ -144,20 +170,29 @@ export class Pair {
   // the awake phone beyond this one's left (-1) or right (1) edge
   next(dir) { const k = this.neighbor(this.key, edgeOf(dir)); return k && !this.away(k) ? k : null; }
   get active() { return this.phase === 'linked' && !!(this.next(1) || this.next(-1)); }
-  lagTo(k) { return Math.min(0.4, (this.rtt.get(k) ?? 0.2) / 2); }
+  get lag() { return Math.min(0.4, (this.isHost ? Math.max(0, ...this.rtt.values()) || 0.25 : this.rttHost) / 2); }
+  // he runs faster the more phones there are: 1.5x for two, up to 2.6x from 22 on
+  get pace() { return 1.5 + 1.1 * Math.min(1, Math.max(0, (this.count - 2) / 20)); }
+  // how often a build may happen here, as a share of the single-phone rate: only lucky phones, less in big rooms
+  get buildShare() { return this.lucky.has(this.key) ? Math.min(1, 4 / Math.max(1, this.count)) : 0; }
 
   // 川哥 just ran past the edge toward `dir`: pass him to the phone there
   handoff(dir, s) {
     const to = this.next(dir);
     if (!to) return;
-    this.mine = false; this.holder = to;
-    this.send('run', { ...s, to, seam: this.seam(this.key, edgeOf(dir)) });
+    this.mine = false;
+    this.direct(to, 'run', { ...s, seam: this.seam(this.key, edgeOf(dir)) });
     // the message got lost: after a while he starts from here again
     this.stop(this.unsure);
-    this.unsure = this.later(4000, () => { if (this.holder === to) this.take(); });
+    this.unsure = this.later(4000, () => this.took(to));
   }
 
-  take() { this.mine = true; this.holder = this.key; this.send('got', {}); }
+  // this phone holds 川哥 now (after `prev` had him): the host keeps count
+  took(prev) {
+    this.mine = true;
+    if (this.isHost) { this.holders.delete(prev); this.holders.add(this.key); }
+    else this.direct(this.hostKey, 'got', { prev });
+  }
 
   // tapping 川伯's avatar while 川哥 is on another phone calls him over
   call() { this.send('call', {}); }
@@ -174,10 +209,14 @@ export class Pair {
   // edges a finger crossed: [{ kind: 'in' | 'out', edge, s (seam height), t (performance.now()), weak, sure }]
   swiped(list) {
     const v = list.map(x => ({ ...x, t: x.t + this.offset }));
-    if (this.role === 'host') this.onEdges(this.key, v); else this.send('edge', { to: this.hostKey, list: v });
+    if (this.isHost) this.onEdges(this.key, v); else this.direct(this.hostKey, 'edge', { list: v });
   }
-  lineUp() { if (this.role === 'host') this.onQueue(this.key); else this.send('queue', { to: this.hostKey }); }
-  startOver() { if (this.role === 'host') this.onStartOver(); else this.send('again', { to: this.hostKey }); }
+  lineUp() { if (this.isHost) this.onQueue(this.key); else this.direct(this.hostKey, 'queue', {}); }
+  startOver() { if (this.isHost) this.onStartOver(); else this.direct(this.hostKey, 'again', {}); }
+  // host only: phones per row for lining up by number, and "they're in place"
+  setCols(c) { if (!this.isHost) return; this.cols = Math.round(num(c, 1, 13, 6)); this.publish(); }
+  arrange() { if (this.isHost) this.onArrange(); }
+  defaultCols(n = this.count) { return n <= 6 ? n : n <= 12 ? Math.ceil(n / 2) : 6; }
 
   // --- pairing --------------------------------------------------------------------------------------
   open(code, role) {
@@ -191,8 +230,9 @@ export class Pair {
   }
 
   host() {
-    this.open(String(1000 + Math.floor(Math.random() * 9000)), 'host');
-    this.members = [this.key]; this.hostKey = this.key; this.mine = true; this.holder = this.key;
+    this.open(String(100000 + Math.floor(Math.random() * 900000)), 'host');
+    this.members = [this.key]; this.hostKey = this.key; this.nums.set(this.key, ++this.counter);
+    this.mine = true; this.holders.add(this.key);
     this.place();
     this.set('hosting');
     this.later(WAIT_HOST, () => { if (this.phase === 'hosting') this.end('timeout'); });
@@ -214,6 +254,7 @@ export class Pair {
   }
 
   send(event, p) { return this.ch?.send(event, { ...p, from: this.key }) || false; }
+  direct(to, event, p) { return !!to && (this.ch?.sendTo(to, event, { ...p, from: this.key, to }) || false); }
 
   status(s) {
     if (s === 'closed') { this.end('offline'); return; }
@@ -252,14 +293,14 @@ export class Pair {
       } else if (this.seen.has(k) && !this.gone.has(k)) {
         this.gone.add(k);
         changed = true;
-        if (this.role === 'host') this.graces.set(k, this.later(GRACE, () => this.drop(k, 'peer-gone')));
-        else if (k === this.hostKey) { this.set('lost'); this.graces.set(k, this.later(GRACE, () => this.end('peer-gone'))); }
+        if (this.isHost) this.graces.set(k, this.later(GRACE, () => this.drop(k, 'peer-gone')));
+        else if (k === this.hostKey) { this.set('lost'); this.graces.set(k, this.later(GRACE, () => this.succeed(k, 'peer-gone'))); }
       }
     }
     if (changed) this.changed();
   }
 
-  // something about the room changed: tell the screens; a row just completed sends him off on a first run
+  // something about the room changed: tell the screens; a room just put together sends 川哥 off on a first run
   changed() {
     const whole = this.complete;
     if (whole && !this.whole && this.mine) this.runner?.called(1.6);
@@ -268,79 +309,84 @@ export class Pair {
   }
 
   pings() {
-    const ping = () => this.send('ping', { t: performance.now() });
-    ping(); this.later(300, ping); this.later(800, ping);
+    const ping = () => this.direct(this.hostKey, 'ping', { t: performance.now(), r: this.rttHost });
+    ping(); this.later(400, ping); this.later(1000, ping);
     this.every(10000, ping);
   }
 
   message(ev, p) {
     if (!this.ch || !p || !isKey(p.from) || p.from === this.key) return;
     if (p.to && p.to !== this.key) return;
-    const f = p.from, host = this.role === 'host';
-    if (host && ev === 'knock') { this.admit(f); return; }
-    if (!host) {
-      if (ev === 'welcome' && (!this.hostKey || this.hostKey === f)) {
+    const f = p.from;
+    if (this.isHost && ev === 'knock') { this.admit(f); return; }
+    if (!this.isHost) {
+      if (ev === 'welcome') {
+        // the welcome carries the room as it is (it can come after the room-wide layout that announced us)
         this.hostKey = f; this.welcomed = true;
-        if (this.phase === 'joining') { this.set('linked'); this.pings(); }
+        if (this.phase === 'joining') { this.phase = 'linked'; this.pings(); }
+        if (Array.isArray(p.members)) this.onLayout(f, p); else this.set(this.phase);
         return;
       }
       if (ev === 'full' && this.phase === 'joining') { this.end('full'); return; }
-      if (ev === 'layout' && f === this.hostKey) { this.onLayout(p); return; }
+      if (ev === 'layout') { this.onLayout(f, p); return; }
     }
     if (!this.members.includes(f)) return;
     const r = this.runner;
     switch (ev) {
-      case 'ping': this.send('pong', { to: f, t: p.t, h: performance.now() }); break;
+      case 'ping':
+        if (!this.isHost) break;
+        this.direct(f, 'pong', { t: p.t, h: performance.now() });
+        if (p.r) this.rtt.set(f, num(p.r, 0, 5));
+        break;
       case 'pong': {
         const now = performance.now(), rtt = now - num(p.t, 0, Infinity, now);
         if (rtt < 0 || rtt > 5000) break;
-        this.rtt.set(f, (this.rtt.get(f) ?? rtt / 1000) * 0.6 + rtt / 1000 * 0.4);
-        if (f === this.hostKey && !host && rtt <= this.best) { this.best = rtt; this.offset = num(p.h, 0, Infinity) - (num(p.t, 0, Infinity) + now) / 2; }
+        this.rttHost = this.rttHost * 0.6 + rtt / 1000 * 0.4;
+        if (rtt <= this.best) { this.best = rtt; this.offset = num(p.h, 0, Infinity) - (num(p.t, 0, Infinity) + now) / 2; }
         break;
       }
-      case 'edge': if (host && Array.isArray(p.list)) this.onEdges(f, p.list.slice(0, 4)); break;
-      case 'queue': if (host) this.onQueue(f); break;
-      case 'again': if (host) this.onStartOver(); break;
+      case 'edge': if (this.isHost && Array.isArray(p.list)) this.onEdges(f, p.list.slice(0, 4)); break;
+      case 'queue': if (this.isHost) this.onQueue(f); break;
+      case 'again': if (this.isHost) this.onStartOver(); break;
       case 'run': {
         const dir = p.dir === -1 ? -1 : 1;
-        this.take();
+        this.took(f);
         r?.enter({
           dir, pose: p.pose === 'trip' ? 'trip' : 'run', t: num(p.t, 0, 6), px: num(p.px, -200, 400),
-          v: num(p.v, 0, 600, 100), sy: num(p.sy, -2000, 4000), H: num(p.H, 100, 4000, innerHeight),
+          v: num(p.v, 0, 1200, 100), sy: num(p.sy, -2000, 4000), H: num(p.H, 100, 4000, innerHeight),
           h: num(p.h, 0, 2), facing: num(p.facing, -4, 4, NaN), tripped: !!p.tripped,
-          seam: p.seam == null ? null : num(p.seam, -2000, 4000), lag: this.lagTo(f),
+          seam: p.seam == null ? null : num(p.seam, -2000, 4000), lag: this.lag,
         });
+        if (this.isHost || f !== this.hostKey) this.direct(f, 'got', { prev: f });   // (took() already told the host)
         break;
       }
       case 'got':
-        this.holder = f;
-        if (this.mine) this.mine = false;
-        this.stop(this.unsure);
+        if (p.prev === this.key) this.stop(this.unsure);
+        if (this.isHost) { this.holders.delete(p.prev); this.holders.add(f); }
         break;
       case 'call': {
-        if (!this.mine) break;
-        const cf = this.cells.get(f), cm = this.cells.get(this.key);
-        const dir = cf && cm && this.groups.get(f) === this.groups.get(this.key) ? Math.sign(cf[0] - cm[0]) : 0;
-        r?.called(0, dir);
+        // the 川哥 of the caller's row comes over
+        if (!this.mine || !this.row().includes(f)) break;
+        r?.called(0, Math.sign(this.cells.get(f)[0] - this.cells.get(this.key)[0]));
         break;
       }
-      case 'give': this.take(); break;
+      case 'give': this.took(f); break;
       case 'vis': if (p.hidden) this.hidden.add(f); else this.hidden.delete(f); this.changed(); break;
       case 'bye':
-        if (host) this.drop(f, 'peer-left');
-        else if (f === this.hostKey) this.end('peer-left');
+        if (this.isHost) this.drop(f, 'peer-left');
+        else if (f === this.hostKey) this.succeed(f, 'peer-left');
         break;
     }
   }
 
-  // a phone put away can't show him: it hands him to an awake phone, and is skipped until it's back
+  // a phone put away can't show him: it hands him to an awake phone in its row, and is skipped until it's back
   visibility() {
     if (!this.ch) return;
     if (document.hidden) {
       this.send('vis', { hidden: true });
       if (this.mine) {
-        const to = this.next(1) || this.next(-1) || this.members.find(k => k !== this.key && !this.away(k));
-        if (to) { this.mine = false; this.holder = to; this.send('give', { to }); }
+        const to = this.next(1) || this.next(-1);
+        if (to) { this.mine = false; this.direct(to, 'give', {}); }
       }
     } else {
       this.ch.wake();
@@ -348,36 +394,86 @@ export class Pair {
     }
   }
 
+  // the host left: the phone with the smallest number takes the room over
+  succeed(old, why) {
+    if (!this.members.includes(old)) return;
+    this.members = this.members.filter(k => k !== old);
+    this.links = this.links.filter(L => L.a !== old && L.b !== old);
+    this.holders.delete(old); this.lucky.delete(old); this.gone.delete(old); this.hidden.delete(old);
+    if (this.members.length < 2) { this.end(why); return; }
+    const next = this.members.filter(k => !this.gone.has(k)).sort((a, b) => (this.nums.get(a) || 1e9) - (this.nums.get(b) || 1e9))[0] || this.members[0];
+    this.hostKey = next;
+    if (this.phase === 'lost') this.set('linked');
+    if (next !== this.key) { this.place(); this.changed(); return; }
+    this.role = 'host';
+    this.ch.track({ role: 'host' });
+    this.counter = Math.max(0, ...this.nums.values());
+    if (this.mine) this.holders.add(this.key);
+    this.stop(this.knocking);
+    this.drawLucky();
+    this.publish();
+  }
+
   // --- the host keeps the room ------------------------------------------------------------------------
   publish() {
     this.place();
-    this.send('layout', { members: this.members, links: this.links, queued: this.queued });
+    // one 川哥 per row of two or more: keep the holder a row has, give one to a row that has none
+    for (const k of [...this.holders]) if (!this.members.includes(k)) this.holders.delete(k);
+    for (const r of this.rows()) {
+      if (r.length < 2) { r.forEach(k => this.holders.delete(k)); continue; }
+      const have = r.filter(k => this.holders.has(k));
+      if (!have.length) this.holders.add(r[0]); else have.slice(1).forEach(k => this.holders.delete(k));
+    }
+    this.mine = this.holders.has(this.key) || (this.mine && !this.complete);
+    this.send('layout', this.layout());
     this.changed();
   }
+  layout() {
+    return {
+      members: this.members, nums: Object.fromEntries(this.nums), links: this.links, cols: this.cols,
+      queued: this.queued, holders: [...this.holders], lucky: [...this.lucky],
+    };
+  }
 
-  onLayout(p) {
-    if (!Array.isArray(p.members) || !Array.isArray(p.links)) return;
+  onLayout(f, p) {
+    // not let in yet: the room's news is about the phones that are
+    if (this.phase === 'joining' || !this.hostKey || !Array.isArray(p.members) || !Array.isArray(p.links)) return;
+    // the host's word; after a hand-over, the new host's (the smallest number still here)
+    const n = k => this.nums.get(k) || 1e9;
+    if (f !== this.hostKey && !this.gone.has(this.hostKey) && this.members.includes(this.hostKey) && n(f) >= n(this.hostKey)) return;
     const members = p.members.filter(isKey).slice(0, MAX_PHONES);
     // dropped from the room (gone too long): this visit's pairing is over
     if (!members.includes(this.key)) { this.end('dropped'); return; }
+    this.hostKey = f;
     this.members = members;
+    this.nums = new Map(Object.entries(p.nums || {}).filter(([k]) => members.includes(k)).map(([k, n]) => [k, num(n, 1, 999, 0)]));
     this.links = p.links.filter(L => L && members.includes(L.a) && members.includes(L.b) && (L.e === 'r' || L.e === 'd')).map(L => ({
       a: L.a, e: L.e, b: L.b, sa: L.sa == null ? null : num(L.sa, -2000, 4000), sb: L.sb == null ? null : num(L.sb, -2000, 4000),
     }));
+    this.cols = num(p.cols, 0, 13, 0);
     this.queued = Array.isArray(p.queued) ? p.queued.filter(k => members.includes(k)) : [];
+    this.holders = new Set(Array.isArray(p.holders) ? p.holders.filter(k => members.includes(k)) : []);
+    this.lucky = new Set(Array.isArray(p.lucky) ? p.lucky.filter(k => members.includes(k)) : []);
     this.place();
+    this.mine = this.holders.has(this.key);
     this.changed();
   }
 
   admit(k) {
     if (!this.members.includes(k)) {
-      if (this.members.length >= MAX_PHONES) { this.send('full', { to: k }); return; }
+      if (this.members.length >= MAX_PHONES) { this.direct(k, 'full', {}); return; }
       this.members.push(k);
+      this.nums.set(k, ++this.counter);
       this.queued = [];
+      if (!this.cols || this.cols === this.defaultCols(this.members.length - 1)) this.cols = this.defaultCols();
+      this.drawLucky();
     }
-    this.send('welcome', { to: k });
-    if (this.phase === 'hosting') { this.set('linked'); this.pings(); }
+    if (this.phase === 'hosting') {
+      this.set('linked');
+      this.every(5 * 60e3, () => { this.drawLucky(); this.publish(); });   // new lucky phones now and then
+    }
     this.publish();
+    this.direct(k, 'welcome', this.layout());
   }
 
   drop(k, why) {
@@ -385,10 +481,16 @@ export class Pair {
     this.members = this.members.filter(m => m !== k);
     this.links = this.links.filter(L => L.a !== k && L.b !== k);
     this.queued = this.queued.filter(m => m !== k);
-    this.hidden.delete(k); this.gone.delete(k);
+    this.hidden.delete(k); this.gone.delete(k); this.lucky.delete(k);
     if (this.members.length < 2) { this.end(why); return; }
-    if (this.holder === k) this.take();
+    if (this.lucky.size < Math.min(LUCKY, this.members.length)) this.drawLucky();
     this.publish();
+  }
+
+  drawLucky() {
+    const pool = [...this.members];
+    this.lucky = new Set();
+    while (pool.length && this.lucky.size < LUCKY) this.lucky.add(pool.splice(Math.floor(Math.random() * pool.length), 1)[0]);
   }
 
   // b lies on a's edge e. A fresh observation wins: it replaces whatever else held those edges, and if the
@@ -466,6 +568,19 @@ export class Pair {
       this.links = this.queued.slice(1).map((b, i) => ({ a: this.queued[i], e: 'r', b, sa: null, sb: null }));
       this.queued = [];
     }
+    this.publish();
+  }
+
+  // by number, `cols` to a row, rows top to bottom
+  onArrange() {
+    const cols = this.cols || this.defaultCols();
+    const order = [...this.members].sort((a, b) => this.nums.get(a) - this.nums.get(b));
+    this.links = [];
+    order.forEach((k, i) => {
+      if ((i + 1) % cols && order[i + 1]) this.links.push({ a: k, e: 'r', b: order[i + 1], sa: null, sb: null });
+      if (order[i + cols]) this.links.push({ a: k, e: 'd', b: order[i + cols], sa: null, sb: null });
+    });
+    this.queued = [];
     this.publish();
   }
 

@@ -1,25 +1,34 @@
-// One short-lived message channel between two phones: a tiny Supabase Realtime client (broadcast + presence on
-// a single channel, no database tables), and a same-browser stand-in for local testing.
+// A short-lived message room for a group of phones: a tiny Supabase Realtime client (broadcast + presence, no
+// database tables), and a same-browser stand-in for local testing.
+//
+// Each phone joins two topics on one WebSocket: the room (everyone hears it, and presence says who is there) and
+// its own inbox (only it listens). Room-wide messages are rare (who joined, the layout, goodbyes); everything else
+// goes straight to one phone's inbox through Realtime's REST broadcast, so a room of 52 phones doesn't make
+// every phone hear every hand-over.
 //
 // Supabase Realtime speaks the Phoenix channel protocol over a WebSocket, one JSON object per message:
 //   join      { topic: 'realtime:<name>', event: 'phx_join', payload: { config: { broadcast, presence, private } } }
 //   broadcast { topic, event: 'broadcast', payload: { type: 'broadcast', event, payload } }
 //   track     { topic, event: 'presence', payload: { type: 'presence', event: 'track', payload: meta } }
 //   presence_state / presence_diff come back as { [key]: { metas: [{ phx_ref, ...meta }] } }
-// and a heartbeat on topic 'phoenix' every 25 s, or the server hangs up.
+// and a heartbeat on topic 'phoenix' every 25 s, or the server hangs up. A direct message is
+//   POST /realtime/v1/api/broadcast { messages: [{ topic: '<name>-<key>', event, payload, private: false }] }
 //
-//   const ch = openChannel('hl-pair-4827', { key, transport: 'realtime' | 'local', on: { status, message, presence } });
-//   ch.track({ role: 'host' }); ch.send('ping', { t }); ch.wake(); ch.close();
+//   const ch = openChannel('hl-pair-482731', { key, transport: 'realtime' | 'local', on: { status, message, presence } });
+//   ch.track({ role: 'host' }); ch.send('layout', {...}); ch.sendTo(key, 'run', {...}); ch.wake(); ch.close();
 //   on.status('joined' | 'retry' | 'closed'), on.message(event, payload), on.presence(Map key -> meta)
 import { CONFIG } from '../config.js';
 
 export function openChannel(name, opts) {
   return opts.transport === 'local' ? new LocalChannel(name, opts) : new RealtimeChannel(name, opts);
 }
+const inboxOf = (name, key) => `${name}-${key}`;
 
 class RealtimeChannel {
   constructor(name, { key, on }) {
+    this.name = name;
     this.topic = `realtime:${name}`;
+    this.inbox = `realtime:${inboxOf(name, key)}`;
     this.key = key;
     this.on = on;
     this.ref = 0;
@@ -35,11 +44,13 @@ class RealtimeChannel {
     const url = `${CONFIG.supabaseUrl.replace(/^http/, 'ws')}/realtime/v1/websocket?apikey=${encodeURIComponent(CONFIG.supabaseAnonKey)}&vsn=1.0.0`;
     const ws = this.ws = new WebSocket(url);
     ws.onopen = () => {
-      this.joinRef = String(this.ref + 1);
-      this.push('phx_join', {
-        config: { broadcast: { self: false, ack: false }, presence: { key: this.key }, private: false },
-        access_token: CONFIG.supabaseAnonKey,
-      });
+      const join = (topic, presence) => {
+        const ref = String(this.ref + 1);
+        this.push('phx_join', { config: { broadcast: { self: false, ack: false }, presence: { key: presence }, private: false }, access_token: CONFIG.supabaseAnonKey }, topic, ref);
+        return ref;
+      };
+      this.joinRef = join(this.topic, this.key);
+      this.inboxRef = join(this.inbox, '');
       this.beat = setInterval(() => this.push('heartbeat', {}, 'phoenix'), 25000);
     };
     ws.onmessage = e => { try { this.receive(JSON.parse(e.data)); } catch (err) { /* not ours */ } };
@@ -62,15 +73,19 @@ class RealtimeChannel {
     this.connect();
   }
 
-  push(event, payload, topic = this.topic) {
+  push(event, payload, topic = this.topic, joinRef = topic === this.topic ? this.joinRef : topic === this.inbox ? this.inboxRef : undefined) {
     if (this.ws?.readyState !== WebSocket.OPEN) return false;
-    this.ws.send(JSON.stringify({ topic, event, payload, ref: String(++this.ref), join_ref: topic === this.topic ? this.joinRef : undefined }));
+    this.ws.send(JSON.stringify({ topic, event, payload, ref: String(++this.ref), join_ref: joinRef }));
     return true;
   }
 
   receive(m) {
-    if (m.topic !== this.topic) return;
     const p = m.payload || {};
+    if (m.topic === this.inbox) {
+      if (m.event === 'broadcast' && p.event) this.on.message(p.event, p.payload || {});
+      return;
+    }
+    if (m.topic !== this.topic) return;
     switch (m.event) {
       case 'phx_reply':
         if (m.ref !== this.joinRef) return;
@@ -111,11 +126,22 @@ class RealtimeChannel {
     return this.joined && this.push('broadcast', { type: 'broadcast', event, payload });
   }
 
+  // one phone's inbox, over HTTPS (keep-alive keeps it quick after the first one)
+  sendTo(key, event, payload) {
+    if (this.closed) return false;
+    fetch(`${CONFIG.supabaseUrl}/realtime/v1/api/broadcast`, {
+      method: 'POST',
+      headers: { apikey: CONFIG.supabaseAnonKey, Authorization: `Bearer ${CONFIG.supabaseAnonKey}`, 'Content-Type': 'application/json' },
+      body: JSON.stringify({ messages: [{ topic: inboxOf(this.name, key), event, payload, private: false }] }),
+    }).catch(() => {});
+    return true;
+  }
+
   close() {
     if (this.closed && !this.ws) return;
     this.closed = true;
     clearTimeout(this.again); clearInterval(this.beat);
-    if (this.joined) this.push('phx_leave', {});
+    if (this.joined) { this.push('phx_leave', {}); this.push('phx_leave', {}, this.inbox); }
     const ws = this.ws; this.ws = null;
     try { ws?.close(); } catch (e) { /* already gone */ }
   }
@@ -137,6 +163,7 @@ class LocalChannel {
 
   receive(m) {
     if (this.closed || !m || m.key === this.key) return;
+    if (m.to && m.to !== this.key) return;
     if (m.t === 'here') {
       this.members.set(m.key, m.meta);
       if (m.ask && this.meta) this.bc.postMessage({ t: 'here', key: this.key, meta: this.meta });
@@ -162,6 +189,12 @@ class LocalChannel {
   send(event, payload) {
     if (!this.joined || this.closed) return false;
     this.bc.postMessage({ t: 'b', key: this.key, event, payload });
+    return true;
+  }
+
+  sendTo(key, event, payload) {
+    if (this.closed) return false;
+    this.bc.postMessage({ t: 'b', key: this.key, to: key, event, payload });
     return true;
   }
 
