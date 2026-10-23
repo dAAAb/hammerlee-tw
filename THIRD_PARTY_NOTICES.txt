@@ -1,7 +1,8 @@
 跟川伯聊天（hammerlee.tw）使用的第三方軟體與字型授權
 Third-party software and fonts used by hammerlee.tw, with their licences.
 
-照片與政見圖卡取自李四川官方 Portaly（https://portaly.cc/hammerlee），著作權屬原權利人，不在下列授權範圍內。
+本專案自己的程式碼以 MIT 授權（見 LICENSE）；下列第三方軟體與字型各依其授權。
+照片與政見圖卡取自李四川官方 Portaly（https://portaly.cc/hammerlee），版權屬原權利人，不在本專案或下列任何授權範圍內。
 
 ==============================================================================
 three.js（3D 算繪引擎）

@@ -15,7 +15,9 @@
 看起來像 LINE，但畫面上的每個泡泡、每個字、表情、貼圖、照片框，連上面的標題列和下面的輸入列，都是一個個 3D 小模型，用手繪墨線的風格畫出來。
 川伯先聊他做過的事，再聊新北的下一段路；每個人聊到的內容和順序都不一樣，聊完還會拿到一枚專屬的「新北事民徽章」。
 
-> **這是模擬對話。** 川伯說的每一句，都依據他公開的政見與經歷整理，出處記在 [`research/NOTES.md`](research/NOTES.md)。
+> **這是支持者 dAAAb 個人出資製作的粉絲創作，不是李四川競選團隊的官方網站。**
+> 對話是模擬的：川伯說的每一句，都依據他公開的政見與經歷整理，出處記在 [`research/NOTES.md`](research/NOTES.md)。
+> 這個網站從頭到尾是 AI 做的，最初的需求和每次修改都公開在 [製作紀錄](docs/MAKING-OF.md)。
 
 ## 為長輩設計
 
@@ -72,6 +74,7 @@
 - 聊完只會記錄這段對話的編號、聊到的話題和時間。
 - 用 Google Analytics 做匿名使用統計（Google 訊號與廣告個人化都關閉），在設定裡可以關掉。
 - 設定只存在你自己的手機裡；立體視角只在你的手機上計算，不會傳出去。
+- 11 月 28 日投票日當天，依選舉規定網頁暫停一天；之後會先顯示感謝頁，對話仍然可以回顧。
 
 ## 怎麼做的
 
@@ -90,9 +93,15 @@ npm run build   # 沒下載字型也能建置，會用已經建好的 public/gly
 npm run serve   # http://localhost:5173
 ```
 
+## 這個網站是 AI 做的
+
+由 dAAAb 出題、做決定，程式、3D 模型、對話腳本和上線設定都由 Claude（Claude Code）完成：從第一則需求到 hammerlee.tw 上線約 2 小時。
+最初的需求全文、修改次數和時間軸：[`docs/MAKING-OF.md`](docs/MAKING-OF.md)。
+
 ## 授權與致謝
 
+- 本專案的程式碼以 [MIT](LICENSE) 授權。
 - [three.js](https://threejs.org)、[uqr](https://github.com/unjs/uqr)、[Colorfigures](https://april-zhu.com/colorfigures)（April Zhu、Tolga Cohce）：MIT License。
 - [jf 粉圓 Huninn](https://github.com/justfont/Huninn)、[Chiron GoRound TC](https://github.com/chiron-fonts/chiron-go-round-tc)：SIL Open Font License 1.1。
 - 完整授權條款見 [`THIRD_PARTY_NOTICES.txt`](THIRD_PARTY_NOTICES.txt)。
-- 照片與政見圖卡取自[李四川官方 Portaly](https://portaly.cc/hammerlee)，著作權屬原權利人。
+- 照片與政見圖卡取自[李四川官方 Portaly](https://portaly.cc/hammerlee)，版權屬原權利人，不在 MIT 授權範圍內；`research/portaly/` 的轉存資料也是。

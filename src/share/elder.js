@@ -2,6 +2,7 @@
 // painted on a canvas with the same 粉圓 outlines as the 3D letters, so it never depends on a system font.
 import * as THREE from 'three';
 import { ELDER } from '../chat/script.js';
+import { CONFIG } from '../config.js';
 
 const THEMES = {
   sunrise: { sky: ['#ffe9a8', '#ffb36b', '#ff7d7d'], ray: 'rgba(255,255,255,.28)', ink: ['#d6261f', '#1f4fa8'], flower: ['#ff5d8f', '#ffd23a', '#ff8a3d'] },
@@ -89,6 +90,10 @@ export function drawElder(font, id, W = 720, H = 900) {
   const { path: sigp } = font.path2d(sig, W - sgw - 28, H - 24, sg);
   g.lineWidth = 8; g.strokeStyle = '#ffffff'; g.lineJoin = 'round'; g.stroke(sigp);
   g.fillStyle = '#00449a'; g.fill(sigp);
+  // who made it, small in the other corner
+  const { path: cp } = font.path2d(CONFIG.credit, 22, H - 26, 19);
+  g.lineWidth = 6; g.strokeStyle = 'rgba(255,255,255,.85)'; g.stroke(cp);
+  g.fillStyle = '#4a5570'; g.fill(cp);
   return cv;
 }
 

@@ -16,6 +16,9 @@ import { makeBadge, ensureEnvironment, shortId } from './models/badge.js';
 import { shareCard, longImage, badgeCanvas, stickerCanvas, renderSnippet, pickSnippet, buildCard } from './share/export.js';
 import { saveFile, shareFiles, copyText, canvasBlob, shareUrl, lineShareLink, recordChat, inArtifact } from './share/platform.js';
 import { initAnalytics, setAnalytics, track, trackThen } from './share/analytics.js';
+import { phaseAt } from './chat/calendar.js';
+import { showDayNotice } from './ui/daynotice.js';
+import { onPublicSite } from './config.js';
 import { burst } from './fx/confetti.js';
 import { Runner } from './fx/runner.js';
 import { Builds, BUILDS, TIERS, collection } from './fx/builds.js';
@@ -44,6 +47,11 @@ const SETTINGS_KEY = 'hl:settings';
 const saved = (() => { try { return JSON.parse(localStorage.getItem(SETTINGS_KEY) || '{}'); } catch (e) { return {}; } })();
 // usage statistics start before the letters load, so quick visits count too (設定 can turn them off)
 initAnalytics(saved.stats !== false, { dry: q.has('ga-dry') });
+// 11/28 is voting day: no campaigning, so the page pauses for the day; afterwards it thanks people first and the
+// chat can still be looked back on. ?day=YYYY-MM-DD tries a date, but never on the real site.
+const testDay = !onPublicSite && /^\d{4}-\d\d-\d\d$/.test(q.get('day') || '') ? Date.parse(q.get('day') + 'T12:00:00+08:00') : undefined;
+const phase = phaseAt(testDay);
+if (phase !== 'campaign') { track('day_notice', { phase }); await showDayNotice(phase); }
 const stage = new Stage(document.getElementById('stage'));
 const [font, photoAspect] = await Promise.all([
   GlyphFont.load('glyphs.txt'),
@@ -211,9 +219,12 @@ async function shareCanvas(cv, name, text) {
   if (!ok) { await copyText(shareUrl(chat.id)); toast('邀請連結已複製'); }
 }
 
-function viewer({ title, canvas, src, filename, alt, shareText, kind = 'item' }) {
+const SOURCE = '取自李四川官方 Portaly（portaly.cc/hammerlee），版權屬原權利人';
+
+function viewer({ title, canvas, src, filename, alt, shareText, kind = 'item', note }) {
   openSheet({ title }, sheet => {
     sheet.append(canvas ? picture(canvas, alt) : picture(src, alt));
+    if (note) sheet.append(para(note, 'note'));
     const acts = document.createElement('div');
     acts.className = 'acts two';
     const getCanvas = async () => {
@@ -253,7 +264,7 @@ function onTap(h) {
       break;
     }
     case 'photo':
-      viewer({ title: PHOTOS[h.id]?.alt || '川伯傳來的照片', src: `photos/${h.id}.jpg`, filename: `川伯-${h.id}.png`, alt: PHOTOS[h.id]?.alt, kind: h.type });
+      viewer({ title: PHOTOS[h.id]?.alt || '川伯傳來的照片', src: `photos/${h.id}.jpg`, filename: `川伯-${h.id}.png`, alt: PHOTOS[h.id]?.alt, kind: h.type, note: '照片' + SOURCE });
       break;
     case 'elder': {
       const e = ELDER[h.id];
@@ -270,7 +281,7 @@ function onTap(h) {
         for (const l of cd.lines) sheet.append(para('・' + l));
         const acts = document.createElement('div'); acts.className = 'acts';
         acts.append(linkButton('打開完整政見（新視窗）', cd.link, 'main'));
-        sheet.append(acts);
+        sheet.append(acts, para('政見圖文' + SOURCE, 'note'));
       });
       break;
     }
@@ -379,7 +390,7 @@ function openSettings() {
     const about = document.createElement('div'); about.className = 'about';
     about.innerHTML = `
       <h3>關於這個網頁</h3>
-      <p>這是李四川（川伯）競選團隊的互動網頁。內容依據川伯的公開政見與經歷整理，照片與政見圖卡取自
+      <p>這是支持者 dAAAb 個人出資製作的粉絲創作，不是李四川競選團隊的官方網站。對話是模擬的，內容依據川伯的公開政見與經歷整理，照片與政見圖卡取自
       <a href="https://portaly.cc/hammerlee" target="_blank" rel="noopener">李四川官方 Portaly</a>。</p>
       <h3>隱私</h3>
       <p>不需要登入，也不會要你輸入任何資料。對話結束時，只會記錄這段對話的編號、聊到的話題和時間，用來讓分享連結顯示預覽圖；
@@ -418,7 +429,7 @@ function openShare() {
     return;
   }
   const url = shareUrl(chat.id);
-  const invite = '我剛跟未來新北市長李四川聊天，還拿到專屬的新北事民徽章！你也來跟川伯聊聊天吧';
+  const invite = '我剛跟新北市長候選人李四川（川伯）聊天，還拿到專屬的新北事民徽章！你也來跟川伯聊聊天吧';
   openSheet({ title: '分享我跟川伯的對話' }, sheet => {
     sheet.append(para(`這段對話全世界只有你有。徽章編號 No. ${serial}`));
     const ph = placeholder('分享圖製作中…');
@@ -426,7 +437,7 @@ function openShare() {
     let card = null;
     requestAnimationFrame(() => setTimeout(() => {
       card = shareCard(stage, font, chat, builderOpts);
-      ph.replaceWith(picture(card, '分享圖：我跟未來新北市長李四川的對話'));
+      ph.replaceWith(picture(card, '分享圖：我跟新北市長候選人李四川的對話'));
     }, 30));
     const acts = document.createElement('div'); acts.className = 'acts';
     const native = !inArtifact && !!navigator.share;

@@ -29,7 +29,7 @@ const SITE_HEAD = [
   '<link rel="icon" href="favicon.svg" type="image/svg+xml">',
   '<meta property="og:type" content="website">',
   `<meta property="og:url" content="${SITE}">`,
-  '<meta property="og:title" content="跟川伯聊天｜未來新北市長李四川陪你話家常">',
+  '<meta property="og:title" content="跟川伯聊天｜新北市長候選人李四川陪你話家常">',
   '<meta property="og:description" content="不用打字，往下滑就好。一頁滑到底的 3D LINE 對話，每段對話都獨一無二，還有你專屬的新北事民徽章。">',
   `<meta property="og:image" content="${SITE}og-default.png">`,
   '<meta property="og:image:width" content="1200"><meta property="og:image:height" content="630">',

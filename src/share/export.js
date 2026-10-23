@@ -6,6 +6,7 @@ import { Builder } from '../chat/objects.js';
 import { sticker as makeSticker } from '../models/registry.js';
 import { makeBadge, shortId } from '../models/badge.js';
 import { renderObject, isolatedScene, makeCamera } from './render.js';
+import { CONFIG } from '../config.js';
 
 const NAVY = '#00449a', BLUE = '#0096e8', YELLOW = '#ffc105', TEAL = '#2ac9c9', INK = '#231e16';
 
@@ -85,17 +86,24 @@ export function pickSnippet(chat) {
   return msgs.filter(m => m.kind === 'text').slice(0, 3);
 }
 
+// a small line in the corner of a downloadable picture: who made it
+function credited(cv, font) {
+  const g = cv.getContext('2d');
+  if (g) text(g, font, CONFIG.credit, cv.width - 22, cv.height - 20, Math.round(cv.width / 40), '#6b7894', { align: 'right' });
+  return cv;
+}
+
 export function badgeCanvas(stage, font, chatId, size = 900, view = 'iso') {
   const b = makeBadge(chatId, font);
   b.userData.tick(0.6);
   const cv = renderObject(stage, b, { w: size, h: size, view, margin: 0.06, floor: ['#dfeaf8', '#d3e2f5'] });
   b.userData.dispose();
-  return cv;
+  return credited(cv, font);
 }
 
 export function stickerCanvas(stage, font, id, who, size = 900) {
   const s = makeSticker(id, font, who);
-  return renderObject(stage, s, { w: size, h: size, view: 'card', margin: 0.08, floor: ['#fff8e6', '#fbefcf'] });
+  return credited(renderObject(stage, s, { w: size, h: size, view: 'card', margin: 0.08, floor: ['#fff8e6', '#fbefcf'] }), font);
 }
 
 export function shareCard(stage, font, chat, builderOpts) {
@@ -112,7 +120,7 @@ export function shareCard(stage, font, chat, builderOpts) {
   g.lineWidth = 5; g.strokeStyle = INK; rr(g, 34, 36, 600, 560, 28); g.stroke();
   // right column
   const x = 672;
-  text(g, font, '我跟未來新北市長', x, 112, 46, '#ffffff');
+  text(g, font, '我跟新北市長候選人', x, 112, 46, '#ffffff');
   text(g, font, '李四川的對話', x, 190, 68, YELLOW, { stroke: INK, strokeW: 8 });
   const badge = badgeCanvas(stage, font, chat.id, 520, 'iso');
   g.drawImage(badge, x - 6, 214, 250, 250);
@@ -125,7 +133,7 @@ export function shareCard(stage, font, chat, builderOpts) {
   g.fillStyle = YELLOW; rr(g, x, 488, 494, 92, 46); g.fill();
   g.lineWidth = 5; g.strokeStyle = INK; g.stroke();
   text(g, font, '邀請你也來跟川伯聊天 →', x + 247, 548, 34, '#2a1c00', { align: 'center' });
-  text(g, font, '模擬對話・內容依據李四川的公開政見與經歷整理', 36, 621, 17, '#bcd3ff');
+  text(g, font, `模擬對話・內容依據李四川的公開政見與經歷整理｜${CONFIG.credit}`, 36, 621, 17, '#bcd3ff');
   return cv;
 }
 
@@ -183,7 +191,7 @@ export async function longImage(stage, font, chat, builderOpts, { width = 900, o
   g.fillStyle = YELLOW; g.fillRect(0, 286, 900, 14);
   logoBars(g, 770, 150, 60, 1);
   text(g, font, '我跟川伯的對話', 48, 118, 64, '#ffffff');
-  text(g, font, '未來新北市長 李四川', 50, 182, 34, '#bcd3ff');
+  text(g, font, '新北市長候選人 李四川', 50, 182, 34, '#bcd3ff');
   text(g, font, 'No. ' + shortId(chat.id), 50, 240, 30, YELLOW);
   g.restore();
   const fy = H - foot;
@@ -196,6 +204,7 @@ export async function longImage(stage, font, chat, builderOpts, { width = 900, o
   text(g, font, '你也來跟川伯聊聊天吧！', 320, 170, 38, INK);
   text(g, font, '11 月 28 日 新北的事 交給做過的人', 320, 236, 28, '#5d6f92');
   text(g, font, '模擬對話・內容依據川伯的公開政見與經歷整理', 320, 292, 22, '#5d6f92');
+  text(g, font, CONFIG.credit, 320, 330, 22, '#5d6f92');
   g.restore();
   return out;
 }
@@ -231,5 +240,6 @@ export function buildCard(stage, font, createScenery, b, tier, { have = 1, total
   lines.slice(0, 3).forEach((l, i) => text(g, font, l, W / 2, 962 + i * 48, 34, '#4a5570', { align: 'center' }));
   text(g, font, `圖鑑 ${have} / ${total}`, 80, H - 66, 30, NAVY);
   text(g, font, 'hammerlee.tw 跟川伯聊天', W - 80, H - 66, 30, NAVY, { align: 'right' });
+  text(g, font, CONFIG.credit, W / 2, H - 9, 22, '#ffffff', { align: 'center' });
   return cv;
 }

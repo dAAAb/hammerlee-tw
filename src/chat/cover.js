@@ -3,6 +3,7 @@
 import * as THREE from 'three';
 import { toon } from '../engine/toon.js';
 import { roundRect, slabFromShape } from './shapes.js';
+import { CONFIG } from '../config.js';
 
 const BAR_COLS = ['blue', 'blue', 'blue', 'teal', 'yellow', 'navy', 'navy', 'navy', 'yellow', 'teal', 'blue', 'blue', 'blue'];
 
@@ -41,7 +42,7 @@ export function buildCover(font, W) {
     g.add(t);
   }
   // subtitle
-  const sub = '未來新北市長 李四川 陪你話家常', ss = 0.74, sw = font.measure(sub, ss);
+  const sub = '新北市長候選人 李四川 陪你話家常', ss = 0.74, sw = font.measure(sub, ss);
   const sitems = [];
   pen = -sw / 2;
   for (const ch of sub) { sitems.push({ ch, x: pen, z: 7.95, size: ss, depth: 0.12, y: 0 }); pen += font.advance(ch) * ss; }
@@ -54,9 +55,15 @@ export function buildCover(font, W) {
   for (const ch of note) { nitems.push({ ch, x: pen, z: 8.95, size: ns, depth: 0.06, y: 0 }); pen += font.advance(ch) * ns; }
   const ngeo = font.build(nitems);
   if (ngeo) g.add(new THREE.Mesh(ngeo, toon('text', { top: '#5d6f92', text: true })));
+  // and who made it
+  const cs = 0.4, cw = font.measure(CONFIG.credit, cs), citems = [];
+  pen = -cw / 2;
+  for (const ch of CONFIG.credit) { citems.push({ ch, x: pen, z: 9.6, size: cs, depth: 0.05, y: 0 }); pen += font.advance(ch) * cs; }
+  const cgeo = font.build(citems);
+  if (cgeo) g.add(new THREE.Mesh(cgeo, toon('text', { top: '#7d8aa6', text: true })));
   g.userData.tick = t => {
     bars.children.forEach((b, k) => { b.scale.y = 1 + Math.sin(t * 2.2 - k * 0.45) * 0.06; });
   };
-  g.userData.size = { w: Math.max(plateW, 11), h: 9.8 };
+  g.userData.size = { w: Math.max(plateW, 11), h: 10.4 };
   return g;
 }

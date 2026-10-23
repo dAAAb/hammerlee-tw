@@ -4,6 +4,7 @@ import { bench } from './harness.js';
 import { buildCover } from '../chat/cover.js';
 import { renderObject } from '../share/render.js';
 import { createChuanSticker } from '../models/stickers-chuan.js';
+import { CONFIG } from '../config.js';
 
 const b = await bench();
 const { font, stage } = b;
@@ -21,7 +22,7 @@ const text = (str, x, y, size, fill, stroke) => {
   if (stroke) { g.lineJoin = 'round'; g.lineWidth = size * 0.14; g.strokeStyle = stroke; g.stroke(path); }
   g.fillStyle = fill; g.fill(path);
 };
-text('跟未來新北市長', 716, 140, 48, '#ffffff');
+text('跟新北市長候選人', 716, 140, 48, '#ffffff');
 text('李四川聊天', 716, 226, 76, '#ffc105', '#231e16');
 text('不用打字，往下滑就好', 718, 296, 34, '#bcd3ff');
 text('每段對話都獨一無二', 718, 344, 34, '#bcd3ff');
@@ -31,6 +32,7 @@ g.lineWidth = 4; g.strokeStyle = '#231e16'; g.beginPath(); g.roundRect(905, 378,
 g.fillStyle = '#ffc105'; g.beginPath(); g.roundRect(716, 452, 166, 68, 34); g.fill();
 g.lineWidth = 4; g.strokeStyle = '#231e16'; g.stroke();
 text('開始 →', 748, 499, 32, '#2a1c00');
+text(`模擬對話・內容依據李四川的公開政見與經歷整理｜${CONFIG.credit}`, 38, 616, 17, '#bcd3ff');
 const img = new Image();
 img.src = cv.toDataURL('image/png');
 Object.assign(img.style, { position: 'fixed', left: 0, top: 0, width: W + 'px', height: H + 'px', zIndex: 99 });

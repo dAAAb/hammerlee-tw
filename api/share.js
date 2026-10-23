@@ -8,6 +8,7 @@ import { CONFIG } from '../src/config.js';
 import { replayChat } from '../src/chat/generate.js';
 import { shortId } from '../src/chat/serial.js';
 import { NVIDIA, PAST, FUTURE_A, FUTURE_B } from '../src/chat/script.js';
+import { phaseAt, secondsToNextPhase } from '../src/chat/calendar.js';
 
 const SITE = CONFIG.publicUrl;
 const IMAGE = `${SITE}og-default.png`;
@@ -24,9 +25,15 @@ export default async function handler(req) {
   if (!chat || chat.id !== id) return Response.redirect(SITE, 302);
   const serial = shortId(id);
   const plans = chat.topics.filter(t => FUTURE.has(t)).map(t => TITLES[t]).filter(Boolean);
-  const target = `${SITE}#c-${id}`;
-  const title = '我跟未來新北市長李四川的對話';
-  const desc = `新北事民徽章 No. ${serial}・聊到${plans.slice(0, 3).join('、')}${plans.length > 3 ? '…' : ''}。邀請你也來跟川伯聊天`;
+  // voting day: no invitation and no pitch, just the paused page; afterwards a thank-you, and the chat stays viewable
+  const phase = phaseAt();
+  const target = phase === 'vote' ? SITE : `${SITE}#c-${id}`;
+  const title = phase === 'campaign' ? '我跟新北市長候選人李四川的對話' : '跟川伯聊天';
+  const desc = phase === 'campaign'
+    ? `新北事民徽章 No. ${serial}・聊到${plans.slice(0, 3).join('、')}${plans.length > 3 ? '…' : ''}。邀請你也來跟川伯聊天`
+    : phase === 'vote' ? '今天是投票日，這個網頁暫停一天。' : '謝謝你陪川伯聊天。';
+  // a cached copy must never outlive the day it was made for
+  const keep = Math.min(604800, secondsToNextPhase());
   const html = `<!doctype html><html lang="zh-Hant"><head><meta charset="utf-8">
 <title>${esc(title)}</title>
 <meta property="og:type" content="website"><meta property="og:title" content="${esc(title)}">
@@ -38,7 +45,7 @@ export default async function handler(req) {
   return new Response(html, { headers: {
     'content-type': 'text/html; charset=utf-8',
     // the page depends only on the id, so the CDN can keep it
-    'cache-control': 'public, max-age=3600, s-maxage=604800, stale-while-revalidate=86400',
+    'cache-control': `public, max-age=${Math.min(3600, keep)}, s-maxage=${keep}`,
     'x-robots-tag': 'noindex',
   } });
 }

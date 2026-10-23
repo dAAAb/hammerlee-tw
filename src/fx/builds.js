@@ -27,7 +27,7 @@ export const BUILDS = [
   { id: 'hospital', tier: 'SR', model: 'medical', name: '土城醫院', note: '從會勘、協調到一層一層蓋起來，跟了五年。' },
   { id: 'rail', tier: 'SR', model: 'rail', name: '三環三線', note: '參與規劃。當年被笑「夢裡相見」，現在環狀線、機場線、淡海輕軌都在跑。' },
   { id: 'dome', tier: 'SSR', model: 'domecity', name: '台北大巨蛋', note: '他說：協助解決大巨蛋卡關，讓它完工啟用。' },
-  { id: 'nvidia', tier: 'SSR', model: 'nvidia', name: '輝達海外總部（北士科）', note: '提出第三方鑑價解開僵局，2026 年 2 月代表台北市政府和輝達簽約。' },
+  { id: 'nvidia', tier: 'SSR', model: 'nvidia', name: '國際 AI 總部大樓（北士科）', note: '提出第三方鑑價解開用地僵局，2026 年 2 月代表台北市政府簽約。' },
   { id: 'lushe', tier: 'UR', model: 'ai', name: '蘆社大橋（下一段路）', note: '政見：興建蘆社大橋，串起北士科和新北的 AI 產業。' },
 ];
 const SCALE = 0.32;                       // dioramas are ~7 em across: builds are ~2.2 em
