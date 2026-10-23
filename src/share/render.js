@@ -21,13 +21,14 @@ export function makeCamera(view = 'read', shear = { x: -0.22, y: 0.72 }) {
 
 function aim(cam, center, dist = 80) {
   const view = cam.userData.view;
-  const pitch = view === 'iso' ? 36 : 90, yaw = view === 'iso' ? 30 : 0;
+  // read = the page's own camera; iso = a 3/4 show-off view; card = steep enough that flat words stay readable
+  const pitch = view === 'iso' ? 36 : view === 'card' ? 58 : 90, yaw = view === 'iso' ? 30 : view === 'card' ? 16 : 0;
   const p = THREE.MathUtils.degToRad(pitch), y = THREE.MathUtils.degToRad(yaw);
   cam.position.set(center.x + Math.sin(y) * Math.cos(p) * dist, center.y + Math.sin(p) * dist, center.z + Math.cos(y) * Math.cos(p) * dist);
   cam.up.set(-Math.sin(y), 0, -Math.cos(y));
   cam.lookAt(center);
   cam.focusDist = dist;
-  if (view === 'iso') cam.shear.set(0, 0); else cam.shear.set(cam.userData.shearRead.x, cam.userData.shearRead.y);
+  if (view !== 'read') cam.shear.set(0, 0); else cam.shear.set(cam.userData.shearRead.x, cam.userData.shearRead.y);
   cam.near = 0.1; cam.far = dist * 2 + 50;
   cam.updateMatrixWorld();
 }

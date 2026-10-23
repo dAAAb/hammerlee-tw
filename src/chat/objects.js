@@ -76,6 +76,7 @@ export class Builder {
       dispose() {
         group.traverse(o => { if (o.isMesh && o.userData.ownGeo) o.geometry.dispose(); });
         for (const m of rec.mats) m.dispose();
+        rec.badge?.userData.dispose?.();
       },
     };
     return rec;

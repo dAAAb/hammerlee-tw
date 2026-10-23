@@ -218,6 +218,12 @@ export function makeBadge(id, font) {
   medal.rotation.z = spec.tilt * 0.3;
   g.userData.spec = spec;
   g.userData.medal = medal;
+  // everything here is built fresh for this badge, so it can all be freed
+  g.userData.dispose = () => g.traverse(o => {
+    if (!o.isMesh) return;
+    o.geometry.dispose();
+    for (const m of [].concat(o.material)) m.dispose();
+  });
   // slow glint: tip the medal back and forth so the highlights slide across the metal
   g.userData.tick = (t) => {
     medal.rotation.x = Math.sin(t * 0.9) * 0.22;

@@ -59,7 +59,7 @@ export class Chrome {
     // right side buttons: 自動聊 / 大字
     const bigW = 2.6, autoW = 4.3, gap = 0.35, bh = 2.0;
     const xBig = viewW / 2 - 0.45 - bigW, xAuto = xBig - gap - autoW, by = safeTopEm + (HEADER_H - bh) / 2;
-    this.autoBtn = this.pillButton(autoW, bh, '▶ 自動聊', 'yellow', '#3a2a00', 0.78);
+    this.autoBtn = this.pillButton(autoW, bh, this.flags.auto ? '■ 暫停' : '▶ 自動聊', 'yellow', '#3a2a00', 0.78);
     this.autoBtn.group.position.set(xAuto, 0.1, by);
     header.add(this.autoBtn.group);
     this.bigBtn = this.pillButton(bigW, bh, this.flags.big ? '標準' : '大字', 'white', '#163c84', 0.82);
@@ -301,6 +301,20 @@ export class Chrome {
   }
 
   pulseSend() { this.anim.send = 1; }
+
+  // the Auto button reads "■ 暫停" while the chat plays by itself
+  setAuto(on) {
+    if (!this.autoBtn || this.flags.auto === on && this.autoBtn.label === (on ? 'on' : 'off')) return;
+    this.flags.auto = on;
+    const old = this.autoBtn.group;
+    const next = this.pillButton(4.3, 2.0, on ? '■ 暫停' : '▶ 自動聊', on ? 'white' : 'yellow', on ? '#163c84' : '#3a2a00', 0.78);
+    next.group.position.copy(old.position);
+    next.label = on ? 'on' : 'off';
+    old.parent.add(next.group);
+    old.parent.remove(old);
+    this.autoBtn = next;
+    this.noShadows();
+  }
 }
 
 function rect(p, w, h) { return { x: p.x, y: p.y, w, h }; }

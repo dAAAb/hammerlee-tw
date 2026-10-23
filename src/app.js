@@ -189,7 +189,6 @@ export class App {
     // until people have scrolled a few messages themselves, show the bouncing "往下滑" hint when the chat waits
     const waiting = this.intro.done && !this.auto && !this.ff && Math.abs(window.scrollY - this.P) < 4 && this.time - (this.lastMove || 0) > 2.2;
     this.chrome.flags.hint = waiting && this.Pmax < (this.timeline[Math.min(9, this.timeline.length - 1)]?.S ?? 0) && !this.ended;
-    this.chrome.flags.auto = this.auto;
     this.chrome.update(this.time, dt);
     this.textLayer.update();
     this.syncHits();
@@ -319,8 +318,10 @@ export class App {
     addEventListener('resize', onResize);
     new ResizeObserver(onResize).observe(this.stage.canvas);
     const stop = () => { if (this.auto) this.setAuto(false); };
-    addEventListener('wheel', stop, { passive: true });
-    addEventListener('touchstart', stop, { passive: true });
+    // a hand on the page takes over from 自動聊 — but not a tap on the buttons themselves
+    const byHand = e => { if (!e.target?.closest?.('#hits, .sheet-back')) stop(); };
+    addEventListener('wheel', byHand, { passive: true });
+    addEventListener('touchstart', byHand, { passive: true });
     addEventListener('keydown', e => {
       if (e.key === 'ArrowDown' || e.key === ' ' || e.key === 'PageDown') stop();
     });
@@ -392,7 +393,7 @@ export class App {
 
   setAuto(on) {
     this.auto = on;
-    this.chrome.flags.auto = on;
+    this.chrome.setAuto(on);
     this.chrome.layoutButtons();
     this._hitKey = '';
   }

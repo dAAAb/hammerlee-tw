@@ -88,12 +88,14 @@ export function pickSnippet(chat) {
 export function badgeCanvas(stage, font, chatId, size = 900, view = 'iso') {
   const b = makeBadge(chatId, font);
   b.userData.tick(0.6);
-  return renderObject(stage, b, { w: size, h: size, view, margin: 0.06, floor: ['#dfeaf8', '#d3e2f5'] });
+  const cv = renderObject(stage, b, { w: size, h: size, view, margin: 0.06, floor: ['#dfeaf8', '#d3e2f5'] });
+  b.userData.dispose();
+  return cv;
 }
 
 export function stickerCanvas(stage, font, id, who, size = 900) {
   const s = makeSticker(id, font, who);
-  return renderObject(stage, s, { w: size, h: size, view: 'read', margin: 0.08, floor: ['#fff8e6', '#fbefcf'] });
+  return renderObject(stage, s, { w: size, h: size, view: 'card', margin: 0.08, floor: ['#fff8e6', '#fbefcf'] });
 }
 
 export function shareCard(stage, font, chat, builderOpts) {

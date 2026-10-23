@@ -31,8 +31,7 @@ export function bakeStatic(root) {
     const mesh = new THREE.Mesh(merged, mat);
     mesh.castShadow = list.some(x => x.cast);
     mesh.receiveShadow = list.some(x => x.receive);
-    mesh.userData.own = true;
-    out.add(mesh);
+    out.add(mesh);   // shared by every clone: never disposed by a caller
   }
   for (const o of keep) { const c = o.clone(); m.multiplyMatrices(inv, o.matrixWorld); c.matrix.copy(m); c.matrix.decompose(c.position, c.quaternion, c.scale); out.add(c); }
   return out;
