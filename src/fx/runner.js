@@ -2,8 +2,8 @@
 // build the next thing. He runs over the bubbles (hopping up onto them), sometimes trips and loses his hard
 // hat, picks it up and runs on. Tap him and he jumps, then hurries off again. Tap 川伯's avatar and he comes.
 //
-// 兩支手機一起玩 (net/pair.js sets `link`): with a partner phone lying beside this one, he runs toward it, past
-// the edge, and the partner lets him run in from its own edge in the same stride; next time he runs back.
+// 多支手機一起玩 (net/pair.js sets `link`): with phones lying in a row, he runs past the edge toward the next phone
+// and that phone lets him run in from its own edge in the same stride, on to the end of the row; then back.
 import * as THREE from 'three';
 
 const BUBBLE_KINDS = { text: 0.55, card: 0.45, photo: 0.42, elder: 0.42, date: 0.28, end: 0.28 };
@@ -28,23 +28,34 @@ export class Runner {
     this.link = null;
   }
 
-  // the partner phone, when it is there, awake, and we know which side it lies on
+  // the phone link, when an awake phone lies beside this one
   get partner() { return this.link?.active ? this.link : null; }
 
   // a new topic starts: often he dashes off to build it
   topic() { if (this.state === 'off' && Math.random() < 0.55) this.cool = Math.min(this.cool, 0.8 + Math.random() * 1.6); }
   summon() {
     const P = this.partner;
-    if (P && !P.mine && this.state === 'off') { P.call(); return; }   // he is on the other phone: call him over
-    if (this.state === 'off') this.start({ from: P ? -P.side : -1, z: null, trip: false, hop: true }); else this.jump();
+    if (P && !P.mine && this.state === 'off') { P.call(); return; }   // he is on another phone: call him over
+    if (this.state === 'off') this.start({ from: P ? -this.heading() : -1, z: null, trip: false, hop: true }); else this.jump();
   }
-  // the partner phone called him (or pairing just finished): run over soon
-  called(delay = 0) { if (this.state === 'off') this.cool = Math.min(this.cool, delay); else this.soon = true; }
+  // another phone called him (or the row was just put together): run soon, toward `dir` if given
+  called(delay = 0, dir = 0) {
+    this.want = dir;
+    if (this.state === 'off') this.cool = Math.min(this.cool, delay); else this.soon = true;
+  }
+  // which way to run: along the row, away from the end with no phone beyond it
+  heading() {
+    const P = this.partner;
+    if (!P) return Math.random() < 0.5 ? -1 : 1;
+    if (this.want && P.next(this.want)) return this.want;
+    const r = !!P.next(1), l = !!P.next(-1);
+    return r && !l ? 1 : l && !r ? -1 : Math.random() < 0.5 ? -1 : 1;
+  }
 
   laneFree(z) { return !this.app.layout.items.some(it => BLOCKING.has(it.kind) && z > it.z - 2 && z < it.z + it.h + 1.5); }
   runYaw() { return this.dir > 0 ? Math.PI / 2 - 0.42 : -Math.PI / 2 + 0.42; }
 
-  start({ from = this.partner ? -this.partner.side : Math.random() < 0.5 ? -1 : 1, z = null, trip = !this.calm && Math.random() < 0.32, hop = false } = {}) {
+  start({ from = -this.heading(), z = null, trip = !this.calm && Math.random() < 0.32, hop = false } = {}) {
     const st = this.app.stage;
     const half = st.viewW / 2 + 2.5;
     // a lane in the middle band of the screen that crosses no sticker
@@ -64,18 +75,19 @@ export class Runner {
     this.dist = 0;
     this.total = half * 2;
     this.handed = this.tripped = this.soon = false;
+    this.want = 0;
     this.state = 'run';
     this.c.play('run');
     this.c.setFacing(this.runYaw());
     this.g.visible = true;
   }
 
-  // He runs in over the seam from the partner phone, in the state he left it: same stride or stumble, same
-  // height on screen (through the seam the swipe measured), a little further on for the time the message took.
+  // He runs in over the seam from the phone beside this one, in the state he left it: same stride or stumble,
+  // same height on screen (through the seam the swipe measured), a little further on for the time the message took.
   enter(s) {
-    const st = this.app.stage, c = this.c, lag = this.link?.lag || 0;
+    const st = this.app.stage, c = this.c, lag = s.lag || 0;
     const from = -s.dir, edge = st.viewW / 2, half = edge + 2.5;
-    const sy = Math.min(st.cssH * 0.78, Math.max(st.cssH * 0.14, this.link ? this.link.mapY(s.sy, s.H) : s.sy));
+    const sy = Math.min(st.cssH * 0.78, Math.max(st.cssH * 0.14, this.link ? this.link.mapY(s) : s.sy));
     let lane = st.pick(st.cssW / 2, sy, 0).z;
     for (let k = 1; !this.laneFree(lane) && k <= 8; k++) {
       const d = (k + 1 >> 1) * 1.5 * (k % 2 ? 1 : -1);
@@ -91,7 +103,7 @@ export class Runner {
     this.tripped = s.tripped || s.pose === 'trip';
     this.tripAt = this.tripped || this.calm || Math.random() > 0.3 ? 2 : Math.random() * 0.45 + 0.25;
     this.hopAt = 2;
-    this.handed = true;                       // running away from the seam now
+    this.handed = false;                      // on to the next phone, if there is one that way
     this.soon = false;
     this.y = s.h;
     c.play('run');
@@ -181,11 +193,12 @@ export class Runner {
       this.jumpLeft -= dt;
       if (this.jumpLeft <= 0) { this.state = 'run'; c.setFacing(this.runYaw()); }
     }
-    // past the edge that faces the partner phone: hand him over (he keeps running off this screen)
+    // past an edge with a phone beyond it: hand him over (he keeps running off this screen). Only the phone that
+    // holds him does; a 川哥 already running here when the row came together just runs off.
     const st = this.app.stage, edge = st.viewW / 2;
-    if (P && !this.handed && this.dir === P.side && this.x * this.dir > edge) {
+    if (P && P.mine && !this.handed && this.x * this.dir > edge && P.next(this.dir)) {
       this.handed = true;
-      P.handoff({
+      P.handoff(this.dir, {
         dir: this.dir, pose: this.state, t: c.time, px: (this.x * this.dir - edge) * st.emPx, v: (c.speed || 0) * st.emPx,
         sy: st.worldToCss(new THREE.Vector3(this.x, 0, this.lane)).y, H: st.cssH, h: this.y, facing: c.rig.facing.rotation.y,
         tripped: this.tripped,

@@ -27,7 +27,7 @@ import { createMeSticker } from './models/stickers-me.js';
 import { createChuanSticker } from './models/stickers-chuan.js';
 import { createChuanAvatar, createChuanHead } from './models/chuan-avatar.js';
 import { createChuan } from './models/chuan.js';
-import { Pair, pairTransport, isPairCode } from './net/pair.js';
+import { Pair, pairTransport, isPairCode, MAX_PHONES } from './net/pair.js';
 import { PAIR_CSS, openPairSheet, offerJoin, pairChip, pairInfo } from './ui/pair-ui.js';
 
 registerModels({ makeEmoji, createMeSticker, createChuanSticker, createChuanAvatar, createChuan, createChuanHead });
@@ -121,7 +121,7 @@ runner = q.has('norunner') ? null : new Runner(app, createChuan, { calm, sfx: pl
 scenery = new SideScenery(app, createScenery);
 if (q.has('debug')) window.__runner = runner;
 
-// 兩支手機一起玩 (實驗功能): off by default. Nothing is set up, and nothing connects, until it is turned on in 設定
+// 多支手機一起玩 (實驗功能): off by default. Nothing is set up, and nothing connects, until it is turned on in 設定
 // and someone presses 顯示配對碼 / 輸入配對碼, or says yes to the invitation a scanned QR code opens.
 let pair = null;
 function getPair() {
@@ -306,7 +306,7 @@ function openSettings() {
       pairBox.replaceChildren();
       if (settings.pair) pairBox.append(button(pair && pair.phase !== 'idle' ? '配對狀態／結束配對' : '開始配對', () => openPairSheet(getPair()), 'main'));
     };
-    sheet.append(toggle('兩支手機一起玩', '把兩支手機並排平放，小川哥會從這支手機跑到另一支。打開以後，要按「開始配對」才會連線。', settings.pair, v => {
+    sheet.append(toggle('多支手機一起玩', `把 2～${MAX_PHONES} 支手機排成一排平放，小川哥會從一支跑到下一支。打開以後，要按「開始配對」才會連線。`, settings.pair, v => {
       if (v && !pairTransport) { toast('這裡不能用，請到 hammerlee.tw 試試'); return false; }
       settings.pair = v; saveSettings();
       if (!v) pair?.end('off');
@@ -326,9 +326,9 @@ function openSettings() {
       <h3>隱私</h3>
       <p>不需要登入，也不會要你輸入任何資料。對話結束時，只會記錄這段對話的編號、聊到的話題和時間，用來讓分享連結顯示預覽圖；
       設定只存在你自己的手機裡。立體視角只在你的手機上計算，不會傳出去。</p>
-      <p>「兩支手機一起玩」是實驗功能，預設是關的。只有你打開它、按下配對以後才會連線：兩支手機透過 Supabase 的即時訊息服務，
-      只傳一組臨時的四位數配對碼、另一支手機在左邊還是右邊，和小川哥跑到哪裡、跑多快。不會用到你的位置（GPS）或藍牙，
-      不會傳任何個人資料，也不會存進資料庫。結束配對或關掉網頁，連線就斷了。</p>
+      <p>「多支手機一起玩」是實驗功能，預設是關的。只有你打開它、按下配對以後才會連線：手機之間透過 Supabase 的即時訊息服務，
+      只傳一組臨時的四位數配對碼、每支手機排在哪裡（左右哪一邊、手指滑過的高度），和小川哥跑到哪裡、跑多快。
+      不會用到你的位置（GPS）或藍牙，不會傳任何個人資料，也不會存進資料庫。結束配對或關掉網頁，連線就斷了。</p>
       <h3>開源授權與致謝</h3>
       <ul>
         <li><a href="https://threejs.org" target="_blank" rel="noopener">three.js</a> — MIT License</li>
