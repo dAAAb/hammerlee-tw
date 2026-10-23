@@ -342,15 +342,16 @@ export class App {
     const cv = this.stage.canvas;
     addEventListener('pointerdown', e => { down = { x: e.clientX, y: e.clientY, t: performance.now(), on: e.target }; }, { passive: true });
     addEventListener('pointerup', e => {
-      if (!down || (down.on !== cv && down.on !== document.documentElement && down.on !== document.body && !down.on?.classList?.contains('tl'))) { down = null; return; }
+      // the selectable text sits over the bubbles; a finger lands on one of its lines, not the .tl box itself
+      if (!down || (down.on !== cv && down.on !== document.documentElement && down.on !== document.body && !down.on?.closest?.('.tl'))) { down = null; return; }
       const moved = Math.hypot(e.clientX - down.x, e.clientY - down.y);
       const quick = performance.now() - down.t < 450;
-      if (moved < 10 && quick && !(window.getSelection()?.toString())) this.tapAt(e.clientX, e.clientY);
+      if (moved < 10 && quick && !(window.getSelection()?.toString())) this.tapAt(e.clientX, e.clientY, e.pointerType === 'touch');
       down = null;
     }, { passive: true });
   }
 
-  tapAt(x, y) {
+  tapAt(x, y, touch = false) {
     const ray = this.stage.ray(x, y);
     const rc = new THREE.Raycaster(ray.origin, ray.direction, 0, 1000);
     const cands = [];
@@ -360,7 +361,7 @@ export class App {
       const hit = rc.intersectObject(h.obj, true)[0];
       if (hit && (!best || hit.distance < best.d)) best = { h, d: hit.distance };
     }
-    if (this.hooks.tapExtra?.(rc, best?.d ?? Infinity)) return;
+    if (this.hooks.tapExtra?.(rc, best?.d ?? Infinity, { x, y, touch })) return;
     if (best) this.hooks.tap?.(best.h);
   }
 

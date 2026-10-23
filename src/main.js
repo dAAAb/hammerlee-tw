@@ -107,7 +107,7 @@ const app = new App({
     relayout() { scenery?.reset(); },
     topic() { runner?.topic(); },
     avatarTap() { runner?.summon(); },
-    tapExtra(rc) { return runner?.hit(rc) || false; },
+    tapExtra(rc, d, at) { return runner?.hit(rc, at) || false; },
     settings: openSettings,
     feel(it) { const n = soundFor(it); if (n) play(n); },
     key() { play('key'); },

@@ -72,12 +72,22 @@ export class Runner {
   }
 
   // tap test from the app (returns true when he was hit)
-  hit(raycaster) {
+  hit(raycaster, at) {
     if (!this.g.visible) return false;
-    const h = raycaster.intersectObject(this.g, true)[0];
-    if (!h) return false;
+    if (!raycaster.intersectObject(this.g, true)[0] && !(at?.touch && this.near(at.x, at.y))) return false;
     this.jump();
     return true;
+  }
+
+  // fingers are blunt and he keeps running: on touch, anywhere close to his outline on screen counts
+  near(x, y, pad = 24) {
+    const b = (this.box ||= new THREE.Box3()).setFromObject(this.g), st = this.app.stage;
+    let x0 = Infinity, y0 = Infinity, x1 = -Infinity, y1 = -Infinity;
+    for (const cx of [b.min.x, b.max.x]) for (const cy of [b.min.y, b.max.y]) for (const cz of [b.min.z, b.max.z]) {
+      const p = st.worldToCss(new THREE.Vector3(cx, cy, cz));
+      x0 = Math.min(x0, p.x); x1 = Math.max(x1, p.x); y0 = Math.min(y0, p.y); y1 = Math.max(y1, p.y);
+    }
+    return x > x0 - pad && x < x1 + pad && y > y0 - pad && y < y1 + pad;
   }
 
   update(dt) {
