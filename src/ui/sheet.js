@@ -1,12 +1,22 @@
 // Sheets that slide up over the 3D chat: the picture viewer (stickers, photos, 長輩圖, the badge) and the
 // share sheet at the end. Big buttons, big words, one clear main action, the paper-and-ink look of the page.
 export const SHEET_CSS = `
-.sheet-back { position: fixed; inset: 0; z-index: 20; background: rgba(12, 28, 64, .55); display: flex; align-items: flex-end; justify-content: center;
-  padding: 0 max(12px, env(safe-area-inset-right, 0px)) env(safe-area-inset-bottom, 0px) max(12px, env(safe-area-inset-left, 0px)); animation: sheetFade .2s ease-out; }
-.sheet { width: min(560px, 100%); max-height: 92%; overflow: auto; background: var(--paper); color: var(--ink); border: 3px solid var(--ink);
-  border-bottom: 0; border-radius: 26px 26px 0 0; box-shadow: 0 -4px 0 rgba(0,0,0,.06); padding: 18px 18px 22px; animation: sheetUp .28s cubic-bezier(.2,1.2,.4,1);
+.sheet-back { position: fixed; top: 0; left: 0; right: 0; height: 100vh; height: 100dvh; z-index: 20; background: rgba(12, 28, 64, .55);
+  display: flex; align-items: flex-end; justify-content: center;
+  padding: 0 max(12px, env(safe-area-inset-right, 0px)) 0 max(12px, env(safe-area-inset-left, 0px)); animation: sheetFade .2s ease-out; }
+/* sized to the visible screen (100dvh), so a phone's toolbar never hides the bottom; its scroll never runs on into the chat */
+.sheet { box-sizing: border-box; width: min(560px, 100%); max-height: calc(100vh - 16px); max-height: calc(100dvh - 16px - env(safe-area-inset-top, 0px));
+  overflow-y: auto; overscroll-behavior: contain; -webkit-overflow-scrolling: touch; touch-action: pan-y;
+  background: var(--paper); color: var(--ink); border: 3px solid var(--ink); border-bottom: 0; border-radius: 26px 26px 0 0;
+  box-shadow: 0 -4px 0 rgba(0,0,0,.06); padding: 0 18px calc(22px + env(safe-area-inset-bottom, 0px)); animation: sheetUp .28s cubic-bezier(.2,1.2,.4,1);
   font-family: var(--ui-font); }
-.sheet h2 { margin: 2px 4px 12px; font-size: 26px; line-height: 1.3; color: var(--navy); text-wrap: balance; }
+/* the title row stays on top while the sheet scrolls, with a big round 關閉 in the corner */
+.sheet-head { position: sticky; top: 0; z-index: 2; display: flex; align-items: flex-start; gap: 10px; margin: 0 -18px 6px; padding: 16px 14px 10px 18px;
+  background: var(--paper); border-bottom: 2px solid transparent; }
+.sheet-head.scrolled { border-bottom-color: #e3dccb; }
+.sheet h2 { flex: 1; min-width: 0; margin: 6px 4px 0; font-size: 26px; line-height: 1.3; color: var(--navy); text-wrap: balance; }
+.sheet button.x { flex: none; width: 54px; height: 54px; min-height: 0; padding: 0; border-radius: 50%; box-shadow: 3px 3px 0 var(--ink); }
+.sheet button.x svg { width: 26px; height: 26px; }
 .sheet p { margin: 6px 4px 14px; font-size: 19px; line-height: 1.55; }
 .sheet .pic { display: block; width: 100%; border: 3px solid var(--ink); border-radius: 18px; background: #dfeaf8; box-shadow: 4px 4px 0 var(--ink); }
 .sheet .pic.loading { aspect-ratio: 1200 / 630; display: grid; place-items: center; font-size: 20px; color: var(--navy); }
@@ -19,7 +29,8 @@ export const SHEET_CSS = `
 .sheet button:focus-visible, .sheet a.btn:focus-visible { outline: 4px solid var(--blue); outline-offset: 3px; }
 .sheet .main, .sheet a.btn.main { background: var(--yellow); }
 .sheet .line, .sheet a.btn.line { background: var(--line-green); color: #fff; }
-.sheet .close { background: transparent; box-shadow: none; border-color: transparent; color: var(--navy); min-height: 52px; }
+.sheet .close { background: #e9eef6; }
+.sheet > .close { width: 100%; margin-top: 22px; }
 .sheet .note { font-size: 16px; color: #5d6f92; margin-top: 12px; text-align: center; }
 .sheet .serial { font: 700 20px/1.2 ui-monospace, Menlo, monospace; letter-spacing: .06em; color: var(--navy); }
 .set-row { display: flex; align-items: center; gap: 14px; padding: 14px 4px; border-bottom: 2px dashed #e3dccb; }
@@ -77,17 +88,22 @@ export function openSheet({ title, label, onClose }, build) {
   sheet.setAttribute('role', 'dialog');
   sheet.setAttribute('aria-modal', 'true');
   sheet.setAttribute('aria-label', label || title);
+  const head = document.createElement('div'); head.className = 'sheet-head';
   const h = document.createElement('h2'); h.textContent = title;
-  sheet.append(h);
+  const x = button('', closeSheet, 'x');
+  x.setAttribute('aria-label', '關閉');
+  x.innerHTML = '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6 6l12 12M18 6L6 18" stroke="currentColor" stroke-width="3.4" stroke-linecap="round"/></svg>';
+  head.append(h, x);
+  sheet.append(head);
+  sheet.addEventListener('scroll', () => head.classList.toggle('scrolled', sheet.scrollTop > 4), { passive: true });
   build(sheet);
-  const close = button('關閉', closeSheet, 'close');
-  sheet.append(close);
+  sheet.append(button('關閉', closeSheet, 'close'));
   back.append(sheet);
   back.onClose = onClose;
   document.body.append(back);
   open = back;
   addEventListener('keydown', function esc(e) { if (e.key === 'Escape') { closeSheet(); removeEventListener('keydown', esc); } });
-  setTimeout(() => sheet.querySelector('button.main, a.main, button')?.focus(), 50);
+  setTimeout(() => sheet.querySelector('button.main, a.main, button:not(.x)')?.focus({ preventScroll: true }), 50);
   return sheet;
 }
 
