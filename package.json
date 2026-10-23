@@ -1,0 +1,19 @@
+{
+  "name": "hammerlee-3d-line",
+  "private": true,
+  "version": "0.1.0",
+  "description": "跟川伯聊天：一頁滑到底的 3D LINE 對話體驗",
+  "type": "module",
+  "scripts": {
+    "font": "node tools/charset.mjs > build/charset.txt && python3 -I tools/build_font.py assets/fonts/Huninn-Regular.ttf build/charset.txt public/glyphs.bin",
+    "build": "node tools/build.mjs",
+    "dev": "node tools/build.mjs --watch",
+    "serve": "python3 -m http.server 5173 --directory dist"
+  },
+  "dependencies": {
+    "three": "0.170.0"
+  },
+  "devDependencies": {
+    "esbuild": "0.24.0"
+  }
+}
