@@ -24,7 +24,9 @@ export function layoutChat(chat, font, opts) {
   const { viewW, start = new Date(), photoAspect = {} } = opts;
   const W = columnWidth(viewW);
   const left = -W / 2, right = W / 2;
-  const S = SIZES;
+  // narrow columns (big text on a phone) give the words the room: smaller avatar, no clock, only 已讀
+  const compact = W < 15.5;
+  const S = compact ? { ...SIZES, avatar: 1.9, avatarGap: 0.38, timeReserve: 1.25, margin: 0.35, rightMargin: 0.6 } : SIZES;
   const bubbleMaxLeft = W - S.margin - S.avatar - S.avatarGap - S.timeReserve;
   const bubbleMaxRight = W - S.rightMargin - S.timeReserve - 0.4;
   const items = [];
@@ -45,7 +47,7 @@ export function layoutChat(chat, font, opts) {
     z += gap;
     // a minute passes every few messages, like a real chat
     if (who !== 'sys' && rng() < 0.45) { minute++; clock.setMinutes(clock.getMinutes() + 1); }
-    const it = { msg, kind: msg.kind, who, z, run, first: !run, time: clockLabel(clock) };
+    const it = { msg, kind: msg.kind, who, z, run, first: !run, time: compact ? '' : clockLabel(clock), compact, S };
     const isLeft = who === 'chuan';
     const xStart = isLeft ? left + S.margin + S.avatar + S.avatarGap : null;
     if (isLeft && !run) { it.nameZ = z; z += S.nameH; it.z = z; }   // "李四川" above the first bubble of a run
@@ -105,5 +107,5 @@ export function layoutChat(chat, font, opts) {
     items.push(it);
     prevWho = who;
   }
-  return { items, height: z, W, left, right };
+  return { items, height: z, W, left, right, S };
 }

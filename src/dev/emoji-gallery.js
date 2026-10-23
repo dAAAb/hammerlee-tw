@@ -68,7 +68,7 @@ z += 2;
 
 // ---------------------------------------------------------------- mascot poses
 const poses = MASCOT_POSES.filter(p => p !== 'idle');
-const MC = 4.2, MR = 4.6, mcols = 4;
+const MC = 4.8, MR = 5.4, mcols = 3;
 const mz0 = z;
 poses.forEach((p, i) => {
   const x = -(mcols - 1) / 2 * MC + (i % mcols) * MC, zz = z + 1.4 + Math.floor(i / mcols) * MR;

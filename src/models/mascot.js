@@ -1,6 +1,6 @@
 // 小新: the citizen mascot who stands for the user (an elder of New Taipei) in their stickers. A soft teal mochi
-// with a big friendly face on the front-top, stubby arms, two little feet and a tiny brand-yellow cap.
-// Origin at the floor between the feet, faces +z, about 2.5 em tall. createMascot() clones a shared prototype
+// with a big friendly face on the front-top, stubby arms, two little feet and a little yellow flower clip.
+// Origin at the floor between the feet, faces +z, about 2.6 em tall (MASCOT_SCALE × a 2 em model). createMascot() clones a shared prototype
 // (geometry and materials are shared); setMascotPose() swaps the face, arms and props, and the group's
 // userData.tick plays a small looping idle that suits the pose.
 import * as THREE from 'three';
@@ -53,7 +53,7 @@ function stroke(parent, pts, r, pal, name) {
 }
 
 // ---------------------------------------------------------------- the body: a lathed mochi
-const BR = 1.06, YC = 0.8, BT = 1.48, BB = 0.8;
+const BR = 1.12, YC = 0.8, BT = 1.18, BB = 0.8;
 function prof(th) {
   const c = Math.cos(th), s = Math.sin(th);
   return th < 0 ? [BR * Math.pow(Math.max(0, c), 0.55), YC + BB * s] : [BR * c, YC + BT * s];
@@ -74,7 +74,9 @@ function onBody(obj, th, ph, lift = 0) {
 }
 const bodyStroke = (parent, tp, r, pal, lift = 0, name) => stroke(parent, tp.map(([th, ph]) => surf(th, ph, lift).p), r, pal, name);
 
-const EYE_TH = 0.56, EYE_PH = 0.3, MOUTH_TH = 0.3;
+export const MASCOT_SCALE = 1.3;   // the body is modelled ~2 em tall; shown ~2.6 em
+const ARM = 0.56;   // shoulder to hand centre at rest; poses may stretch it (squishy mochi arms)
+const EYE_TH = 0.66, EYE_PH = 0.33, MOUTH_TH = 0.4;
 
 let GEO = null;
 function geos() {
@@ -83,11 +85,9 @@ function geos() {
   for (let i = 0; i <= 28; i++) { const [r, y] = prof(-Math.PI / 2 + Math.PI * i / 28); pts.push(new THREE.Vector2(Math.max(r, i === 0 || i === 28 ? 0 : 1e-4), y)); }
   const dshape = new THREE.Shape();
   dshape.moveTo(-0.21, 0.07); dshape.lineTo(0.21, 0.07); dshape.absellipse(0, 0.07, 0.21, 0.19, 0, -Math.PI, true);
-  const brim = new THREE.Shape();
-  brim.moveTo(-0.4, 0); brim.absellipse(0, 0, 0.4, 0.3, Math.PI, TAU, false);
   GEO = {
     body: new THREE.LatheGeometry(pts, 36),
-    eye: ell(0.12, 0.07, 0.165, 14, 10),
+    eye: ell(0.14, 0.08, 0.19, 14, 10),
     hi: new THREE.SphereGeometry(0.042, 8, 6),
     hi2: new THREE.SphereGeometry(0.024, 8, 6),
     blush: ell(0.15, 0.04, 0.09, 14, 8),
@@ -98,9 +98,9 @@ function geos() {
     arm: new THREE.CapsuleGeometry(0.15, 0.48, 4, 12).translate(0, -0.24, 0),
     hand: new THREE.SphereGeometry(0.17, 14, 10),
     foot: ell(0.25, 0.13, 0.21, 16, 10),
-    cap: new THREE.SphereGeometry(1, 24, 9, 0, TAU, 0, Math.PI / 2).scale(0.47, 0.3, 0.47),
-    brim: puff(brim, 0.05, 0.02, 2),
-    button: new THREE.SphereGeometry(0.07, 10, 8),
+    petal: ell(0.11, 0.06, 0.15, 12, 8),
+    bud: new THREE.SphereGeometry(0.09, 12, 8),
+    leaf: ell(0.07, 0.03, 0.14, 10, 6),
     drop: ell(0.07, 0.05, 0.1, 10, 8),
   };
   return GEO;
@@ -112,37 +112,37 @@ function buildProto() {
   const G = geos();
   const root = new THREE.Group();
   root.name = 'mascot';
-  const sq = group(root, 'squash');
+  const size = group(root, 'size');
+  size.scale.setScalar(MASCOT_SCALE);
+  const sq = group(size, 'squash');
   for (const s of [-1, 1]) add(sq, mesh(G.foot, 'body'), s * 0.42, 0.11, 0.74);
   const tilt = group(sq, 'tilt');
   add(tilt, mesh(G.body, 'body', 'bodyMesh'));
 
-  // cap
-  const cap = group(tilt, 'cap', 0.04, 2.12, -0.02);
-  cap.rotation.set(-0.1, 0, -0.12);
-  add(cap, mesh(G.cap, 'yellow'));
-  const br = add(cap, mesh(G.brim, 'yellow'), 0, 0.0, 0.3);
-  br.rotation.x = 0.18;
-  add(cap, mesh(G.button, 'navy'), 0, 0.29, 0);
-
+  // a little yellow flower clipped on the head (top-right, tipped toward the viewer)
+  const clip = group(tilt, 'clip');
+  onBody(clip, 0.86, 1.2, -0.03);
+  for (let i = 0; i < 5; i++) { const a = i * TAU / 5; const m = add(clip, mesh(G.petal, 'yellow'), Math.sin(a) * 0.15, 0.04, -Math.cos(a) * 0.15); m.rotation.y = -a; }
+  add(clip, mesh(G.bud, 'orange'), 0, 0.08, 0);
+  for (const a of [2.6, 3.7]) { const m = add(clip, mesh(G.leaf, 'leaf'), Math.sin(a) * 0.25, 0.0, -Math.cos(a) * 0.25); m.rotation.y = -a; }
   // face
   const face = group(tilt, 'face');
   const eyeSet = (name, build) => { const g = group(face, 'eyes:' + name); build(g); g.visible = false; return g; };
   const dotEye = (g, ph, big = 1) => {
     const e = onBody(mesh(G.eye, 'eye'), EYE_TH, ph, -0.03);
     e.scale.setScalar(big);
-    add(e, mesh(G.hi, 'white'), -0.035, 0.06, -0.065);
+    add(e, mesh(G.hi, 'white'), -0.04, 0.07, -0.075);
     if (big > 1) add(e, mesh(G.hi2, 'white'), 0.04, 0.05, 0.06);
     g.add(e);
   };
-  const caret = (g, ph, up = 1) => bodyStroke(g, [[EYE_TH - 0.05 * up, ph - 0.12], [EYE_TH + 0.05 * up, ph], [EYE_TH - 0.05 * up, ph + 0.12]], 0.045, 'eye', 0.005);
+  const caret = (g, ph, up = 1) => bodyStroke(g, [[EYE_TH - 0.06 * up, ph - 0.13], [EYE_TH + 0.055 * up, ph], [EYE_TH - 0.06 * up, ph + 0.13]], 0.05, 'eye', 0.005);
   eyeSet('dot', g => { dotEye(g, -EYE_PH); dotEye(g, EYE_PH); });
   eyeSet('wide', g => { dotEye(g, -EYE_PH, 1.22); dotEye(g, EYE_PH, 1.22); });
   eyeSet('happy', g => { caret(g, -EYE_PH); caret(g, EYE_PH); });
   eyeSet('wink', g => { dotEye(g, -EYE_PH); caret(g, EYE_PH); });
   eyeSet('laugh', g => {
-    for (const s of [-1, 1]) bodyStroke(g, [[EYE_TH + 0.07, s * 0.42], [EYE_TH, s * 0.2], [EYE_TH - 0.07, s * 0.42]], 0.045, 'eye', 0.005);
-    for (const s of [-1, 1]) g.add(onBody(mesh(G.drop, 'tear'), EYE_TH - 0.02, s * 0.56, -0.01));
+    for (const s of [-1, 1]) bodyStroke(g, [[EYE_TH + 0.075, s * 0.45], [EYE_TH, s * 0.22], [EYE_TH - 0.075, s * 0.45]], 0.05, 'eye', 0.005);
+    for (const s of [-1, 1]) g.add(onBody(mesh(G.drop, 'tear'), EYE_TH - 0.04, s * 0.6, -0.01));
   });
   eyeSet('heart', g => { for (const s of [-1, 1]) g.add(onBody(mesh(G.heartEye, 'heart'), EYE_TH, s * EYE_PH, -0.02)); });
   eyeSet('teary', g => {
@@ -153,7 +153,7 @@ function buildProto() {
     }
   });
   const mouthSet = (name, build) => { const g = group(face, 'mouth:' + name); build(g); g.visible = false; return g; };
-  mouthSet('smile', g => { const p = []; for (let i = 0; i <= 8; i++) { const u = -1 + i / 4; p.push([MOUTH_TH + 0.07 * u * u, 0.17 * u]); } bodyStroke(g, p, 0.042, 'mouth', 0.004); });
+  mouthSet('smile', g => { const p = []; for (let i = 0; i <= 8; i++) { const u = -1 + i / 4; p.push([MOUTH_TH + 0.075 * u * u, 0.18 * u]); } bodyStroke(g, p, 0.045, 'mouth', 0.004); });
   mouthSet('open', g => {
     const m = onBody(mesh(G.dmouth, 'mouth'), MOUTH_TH, 0, -0.1);
     add(m, mesh(G.tongue, 'tongue'), 0, 0.095, 0.05);
@@ -163,18 +163,18 @@ function buildProto() {
   mouthSet('wobble', g => { const p = []; for (let i = 0; i <= 10; i++) { const u = -1 + i / 5; p.push([MOUTH_TH + 0.025 * Math.sin(u * 7), 0.14 * u]); } bodyStroke(g, p, 0.036, 'mouth', 0.004); });
   mouthSet('cat', g => { bodyStroke(g, [[MOUTH_TH + 0.05, -0.15], [MOUTH_TH - 0.02, -0.075], [MOUTH_TH + 0.04, 0], [MOUTH_TH - 0.02, 0.075], [MOUTH_TH + 0.05, 0.15]], 0.04, 'mouth', 0.004); });
   const blush = group(face, 'blush');
-  for (const s of [-1, 1]) blush.add(onBody(mesh(G.blush, 'cheek'), 0.4, s * 0.58, -0.022));
+  for (const s of [-1, 1]) blush.add(onBody(mesh(G.blush, 'cheek'), MOUTH_TH + 0.08, s * 0.62, -0.022));
 
   // arms: a pivot at each shoulder; the arm hangs along the pivot's -y
   for (const s of [-1, 1]) {
     const { p } = surf(0.0, s * 1.0, -0.08);
     const piv = group(tilt, s > 0 ? 'armR' : 'armL', p.x, p.y, p.z);
-    add(piv, mesh(G.arm, 'body'));
-    const hand = group(piv, s > 0 ? 'handR' : 'handL', 0, -0.56, 0);
+    add(piv, mesh(G.arm, 'body', s > 0 ? 'armMeshR' : 'armMeshL'));
+    const hand = group(piv, s > 0 ? 'handR' : 'handL', 0, -ARM, 0);
     add(hand, mesh(G.hand, 'body'));
   }
-  group(tilt, 'fx');     // pose props that ride on the body (thumb, ring, tea...)
-  group(root, 'float');  // pose props that float around (hearts, sparkles)
+  group(tilt, 'fx');     // pose props that ride on the body (foam thumb, tea, bouquet...)
+  group(size, 'float');  // pose props that float around (hearts, sparkles)
   return root;
 }
 
@@ -188,8 +188,7 @@ function prop(name, build) {
 const PROP_BUILD = {
   pompomY: g => pompom(g, 'yellow'),
   pompomB: g => pompom(g, 'blue'),
-  thumb: g => { add(g, mesh(new THREE.CapsuleGeometry(0.075, 0.13, 4, 10), 'body'), 0, -0.2, 0.05); },
-  ring: g => { add(g, mesh(new THREE.TorusGeometry(0.12, 0.045, 8, 18), 'body'), 0, -0.2, 0.02); for (const x of [-0.09, 0, 0.09]) add(g, mesh(new THREE.CapsuleGeometry(0.045, 0.1, 3, 8), 'body'), x, -0.04, -0.12).rotation.x = -0.6; },
+  maru: g => { add(g, mesh(new THREE.TorusGeometry(0.36, 0.1, 10, 28), { l: '#ff6b5e', m: '#e0473b', d: '#7a1d16' })); },
   cup: g => {
     const prof = [[0, 0], [0.19, 0], [0.22, 0.03], [0.3, 0.34], [0.32, 0.38], [0.3, 0.395], [0.28, 0.375], [0.27, 0.32], [0, 0.32]].map(([r, y]) => new THREE.Vector2(r, y));
     add(g, mesh(new THREE.LatheGeometry(prof, 28), 'white'));
@@ -226,15 +225,15 @@ function pompom(g, pal) {
 const POSE = {
   idle:   { eyes: 'dot', mouth: 'smile', blush: true, R: [0.55, -0.8, 0.25] },
   wow:    { eyes: 'wide', mouth: 'o', blush: false, R: [0.8, 0.55, 0.22], tilt: [-0.08, 0] },
-  love:   { eyes: 'heart', mouth: 'smile', blush: true, R: [-0.25, 0.55, 0.8], tilt: [0, 0.07] },
-  clap:   { eyes: 'happy', mouth: 'open', blush: true, R: [-0.35, 0.3, 0.88] },
-  thumb:  { eyes: 'wink', mouth: 'smile', blush: true, R: [0.45, 0.8, 0.4], L: [0.6, -0.75, 0.3], tilt: [0, -0.06] },
-  tea:    { eyes: 'happy', mouth: 'cat', blush: true, R: [-0.55, -0.05, 0.83] },
-  flower: { eyes: 'dot', mouth: 'smile', blush: true, R: [-0.05, 0.3, 0.95], L: [0.55, -0.8, 0.25], tilt: [0, -0.05] },
+  love:   { eyes: 'heart', mouth: 'smile', blush: true, R: [-0.3, 0.6, 0.75], tilt: [0, 0.07], reach: 0.7 },
+  clap:   { eyes: 'happy', mouth: 'open', blush: true, R: [-0.6, 0.25, 0.76], reach: 0.85 },
+  thumb:  { eyes: 'wink', mouth: 'smile', blush: true, R: [0.35, 0.7, 0.62], L: [0.6, -0.75, 0.3], tilt: [0, -0.06] },
+  tea:    { eyes: 'happy', mouth: 'cat', blush: true, R: [-0.6, -0.1, 0.8], reach: 0.75 },
+  flower: { eyes: 'dot', mouth: 'smile', blush: true, R: [-0.05, 0.3, 0.95], L: [0.55, -0.8, 0.25], tilt: [0, -0.05], reach: 0.7 },
   laugh:  { eyes: 'laugh', mouth: 'open', blush: true, R: [-0.35, -0.3, 0.88], tilt: [-0.12, 0] },
-  ok:     { eyes: 'wink', mouth: 'open', blush: true, R: [0.3, 0.9, 0.3], L: [0.55, -0.8, 0.25], tilt: [0, -0.07] },
+  ok:     { eyes: 'wink', mouth: 'open', blush: true, R: [0.5, 0.85, 0.2], L: [0.55, -0.8, 0.25], tilt: [0, -0.07] },
   cheer:  { eyes: 'happy', mouth: 'open', blush: true, R: [0.45, 0.85, 0.25] },
-  moved:  { eyes: 'teary', mouth: 'wobble', blush: true, R: [-0.6, 0.25, 0.76], tilt: [0.04, 0] },
+  moved:  { eyes: 'teary', mouth: 'wobble', blush: true, R: [-0.65, 0.2, 0.73], tilt: [0.04, 0], reach: 0.8 },
 };
 const dirOf = ([x, y, z], s) => v3(x * s, y, z).normalize();
 function aimArm(piv, dir) { piv.quaternion.setFromUnitVectors(DOWN, dir); }
@@ -261,22 +260,34 @@ export function setMascotPose(group, name) {
   const armR = o('armR'), armL = o('armL'), handR = o('handR'), handL = o('handL');
   const dR = dirOf(P.R, 1), dL = P.L ? dirOf(P.L, -1) : dirOf(P.R, -1);
   aimArm(armR, dR); aimArm(armL, dL);
+  const reach = P.reach || ARM;
+  for (const k of ['R', 'L']) { o('armMesh' + k).scale.y = reach / ARM; o('hand' + k).position.y = -reach; }
   // clear old props
   const fx = o('fx'), fl = o('float');
   for (const h of [handR, handL]) for (const c of [...h.children]) if (c.name.startsWith('prop:')) h.remove(c);
   fx.clear(); fl.clear();
+  fx.position.set(0, 0, 0); fx.rotation.set(0, 0, 0); fx.scale.set(1, 1, 1);
   const ticks = [];
   const emo = (parent, id, x, y, z, s) => { const e = add(parent, makeEmoji(id), x, y, z); e.scale.setScalar(s); if (e.userData.tick) ticks.push(e.userData.tick); return e; };
   if (name === 'cheer') { handR.add(prop('pompomY', PROP_BUILD.pompomY)); handL.add(prop('pompomB', PROP_BUILD.pompomB)); }
-  if (name === 'thumb') { handR.add(prop('thumb', PROP_BUILD.thumb)); emo(fl, 'sparkle', 1.25, 2.3, 0.1, 0.9); }
-  if (name === 'ok') handR.add(prop('ring', PROP_BUILD.ring));
-  if (name === 'love') { emo(fl, 'heart', -1.15, 2.15, 0.15, 0.75); emo(fl, 'heart', 1.1, 2.45, -0.15, 0.6); emo(fl, 'heart', -0.55, 2.9, -0.35, 0.5); }
-  if (name === 'wow') { emo(fl, 'sparkle', -1.3, 2.2, 0.0, 0.85); emo(fl, 'sparkle', 1.3, 2.4, -0.1, 0.7); }
-  if (name === 'tea') { const c = add(fx, prop('cup', PROP_BUILD.cup), 0, 0.6, 1.24); ticks.push(t => { c.getObjectByName('steam').rotation.y = 0.3 * Math.sin(t * 0.9); }); }
+  if (name === 'thumb') {
+    // a big foam 👍 held up beside the face
+    const th = emo(fx, 'thumb', 1.12, 1.55, 0.72, 1.25); th.rotation.set(0.5, -0.25, 0.15);
+    emo(fl, 'sparkle', -1.35, 1.85, 0.1, 0.8);
+  }
+  if (name === 'ok') {
+    // the 「⭕」 mark: a big red ring beside the raised hand
+    const r = add(fl, prop('maru', PROP_BUILD.maru), 1.45, 1.75, 0.2); r.rotation.x = -0.35;
+  }
+  if (name === 'love') { emo(fl, 'heart', -1.25, 1.75, 0.2, 0.75); emo(fl, 'heart', 1.2, 2.0, -0.1, 0.6); emo(fl, 'heart', -0.55, 2.45, -0.45, 0.5); }
+  if (name === 'wow') { emo(fl, 'sparkle', -1.4, 1.8, 0.1, 0.85); emo(fl, 'sparkle', 1.4, 2.0, -0.1, 0.7); }
+  if (name === 'tea') { const c = add(fx, prop('cup', PROP_BUILD.cup), 0, 0.6, 1.36); ticks.push(t => { c.getObjectByName('steam').rotation.y = 0.3 * Math.sin(t * 0.9); }); }
   if (name === 'flower') { const b = add(fx, prop('bouquet', PROP_BUILD.bouquet), 0.62, 1.12, 1.18); b.rotation.set(0.45, 0, -0.35); }
   if (name === 'clap') {
     const pg = new THREE.CapsuleGeometry(0.045, 0.16, 3, 8);
-    for (const [x, y, a] of [[0, 1.42, 0], [-0.24, 1.36, 0.6], [0.24, 1.36, -0.6]]) { const m = add(fx, mesh(pg, 'yellow'), x, y, 1.22); m.rotation.z = a; }
+    for (const sx of [-1, 1]) for (const [x, y, a] of [[1.32, 1.5, 0.5], [1.42, 1.25, 1.2], [1.38, 1.0, 1.9]]) {
+      const m = add(fx, mesh(pg, 'yellow'), sx * x, y, 0.65); m.rotation.z = -sx * a;
+    }
   }
   group.userData.pose = name;
   group.userData.tick = makeTick(group, name, dR, dL, ticks);
@@ -299,11 +310,11 @@ function makeTick(group, name, dR, dL, ticks) {
       case 'love': tilt.rotation.z = t0.z + 0.07 * Math.sin(t * 2.2); break;
       case 'clap': {
         const k = Math.max(0, Math.sin(t * 9));
-        swing(armR, dR, -0.45 * k, 0.1 * k, 0); swing(armL, dL, 0.45 * k, 0.1 * k, 0);
+        swing(armR, dR, -0.3 * k, 0, 0.1 * k); swing(armL, dL, 0.3 * k, 0, 0.1 * k);
         fx.scale.setScalar(0.6 + 0.4 * k);
         break;
       }
-      case 'thumb': { const k = Math.max(0, Math.sin(t * 3)) ** 2; swing(armR, dR, 0, 0.25 * k, 0); break; }
+      case 'thumb': { const k = Math.max(0, Math.sin(t * 3)) ** 2; swing(armR, dR, 0, 0.08 * k, 0); fx.position.y = 0.07 * k; break; }
       case 'tea': tilt.rotation.z = 0.03 * Math.sin(t * 1.3); break;
       case 'flower': tilt.rotation.z = t0.z + 0.05 * Math.sin(t * 1.6); fx.rotation.z = 0.04 * Math.sin(t * 1.6 + 0.5); break;
       case 'laugh': {
@@ -319,10 +330,9 @@ function makeTick(group, name, dR, dL, ticks) {
         sy += 0.03 * Math.abs(k); break;
       }
       case 'moved': {
+        // a slow, wobbly sniffle: sway and little hiccups
         tilt.rotation.z = 0.04 * Math.sin(t * 1.2);
-        const k = 0.5 + 0.5 * Math.sin(t * 3);
-        group.getObjectByName('eyes:teary').children.forEach(c => { if (c.name === 'tear') c.scale.set(1, 1, 1); });
-        sy += 0.01 * k;
+        sy += 0.025 * Math.max(0, Math.sin(t * 4.5)) ** 8;
         break;
       }
       default: break;

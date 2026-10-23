@@ -6,7 +6,7 @@
 // after a ?t= jump; by default a ?t= shot freezes on that frame).
 import * as THREE from 'three';
 import { bench, params } from './harness.js';
-import { createChuan, EXPRESSIONS } from '../models/chuan.js';
+import { createChuan, EXPRESSIONS, SPEEDS } from '../models/chuan.js';
 import { createChuanAvatar, createChuanHead } from '../models/chuan-avatar.js';
 import { createChuanSticker, CHUAN_STICKER_IDS } from '../models/stickers-chuan.js';
 import { POSES } from '../models/catalog.js';
@@ -59,7 +59,7 @@ if (show === 'stickers') {
   target(0, (rows - 1) * dz / 2 - 1.2);
 }
 
-if (show === 'run') {
+if (show === 'run' && !params.has('sheet')) {
   // running (or walking) across the view, moved by the motion's own speed; tap-jump every few seconds
   const m = params.get('m') || 'run';
   const lanes = m === 'all' ? ['walk', 'run'] : [m];
@@ -84,7 +84,35 @@ if (show === 'run') {
   target(0, (lanes.length - 1) * 2.25 - 1.2);
 }
 
-if (show === 'trip') {
+if ((show === 'trip' || show === 'run') && params.has('sheet')) {
+  // contact sheet: one frozen copy per time, two columns. show=trip: trip time after `lead` s of running;
+  // show=run&m=walk|run|idle: motion time; show=run&m=jump: jump time after `lead` s of running
+  const times = params.get('sheet').split(',').map(Number);
+  const motion = show === 'trip' ? 'trip' : (params.get('m') || 'run');
+  const lead = params.has('lead') ? +params.get('lead') : 0.3;
+  const W = 9.5, H = 5.2, cols = 2;
+  times.forEach((T, i) => {
+    const cell = new THREE.Group();
+    cell.position.set((i % cols - 0.5) * W, 0, Math.floor(i / cols) * H);
+    B.add(cell);
+    const c = createChuan();
+    c.setFacing(Math.PI / 2);
+    c.group.position.set(motion === 'trip' ? -4.4 : -1.2 - SPEEDS[motion === 'jump' ? 'run' : motion] * (motion === 'jump' ? lead : T), 0, 0);
+    cell.add(c.group);
+    const delayed = motion === 'trip' || motion === 'jump';
+    c.play(delayed ? 'run' : motion);
+    let tt = 0, started = !delayed;
+    const dt = 1 / 60;
+    for (let k = 0; k < Math.round(((delayed ? lead : 0) + T) * 60); k++) {
+      c.update(dt);
+      c.group.position.x += c.speed * dt;
+      tt += dt;
+      if (!started && tt >= lead - 1e-6) { started = true; c.play(motion); }
+    }
+    B.label(T.toFixed(2), cell.position.x - 3.4, cell.position.z + 1.3, 0.55);
+  });
+  target(0, (Math.ceil(times.length / cols) - 1) * H / 2 - 0.8);
+} else if (show === 'trip') {
   const c = createChuan();
   const yaw = (params.has('yaw') ? +params.get('yaw') : 80) * Math.PI / 180;
   const dir = new THREE.Vector3(Math.sin(yaw), 0, Math.cos(yaw));

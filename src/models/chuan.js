@@ -24,10 +24,10 @@ const QI = new QT();
 // proportions (em)
 export const DIM = {
   hipY: 0.80, hipX: 0.18, thigh: 0.36, shin: 0.33, ankle: 0.11,
-  waist: 0.08, shoulderX: 0.37, shoulderY: 0.62, neckY: 0.80, headY: 0.55, headR: 0.6,
+  waist: 0.08, shoulderX: 0.37, shoulderY: 0.62, neckY: 0.80, headY: 0.57, headR: 0.62,
   upper: 0.33, lower: 0.31, fist: 0.115,
 };
-const FACE = 8;              // elevation (deg) of the face centre on the head sphere
+const FACE = 11;             // elevation (deg) of the face centre on the head sphere
 const BELLY = 0.36;          // base height that rests his tummy on the floor when he lies flat
 
 // ---------------------------------------------------------------------------------------------------------
@@ -144,6 +144,15 @@ function hairGeo() {
     return g;
   });
 }
+// the skull, pressed flat on top so the crew cut's flat top always covers it
+function skullGeo() {
+  return memo('skull', () => {
+    const R = DIM.headR, g = new THREE.SphereGeometry(R, 28, 20);
+    const pos = g.attributes.position, nrm = g.attributes.normal, top = R * 0.86;
+    for (let i = 0; i < pos.count; i++) if (pos.getY(i) > top) { pos.setY(i, top); nrm.setXYZ(i, 0, 1, 0); }
+    return g;
+  });
+}
 function glassesGeo() {
   return memo('glasses', () => {
     const s = rrPath(new THREE.Shape(), 0, 0, 0.26, 0.19, 0.05);
@@ -198,7 +207,7 @@ export function createHead() {
   const m = mats(), R = DIM.headR;
   const g = new THREE.Group();
   g.name = 'chuanHead';
-  add(g, sph(R, 28, 20), m.skin);
+  add(g, skullGeo(), m.skin);
   add(g, hairGeo(), m.hair);
   const place = (o, el, az, r) => { const n = sdir(el, az); o.position.copy(n).multiplyScalar(r); o.quaternion.copy(tangentQ(n)); g.add(o); return o; };
   const mesh = (geo, mat) => { const o = new THREE.Mesh(geo, mat); o.castShadow = true; return o; };
@@ -251,8 +260,8 @@ export function createHead() {
 
   // hard-hat seat (the hat's origin is the centre of its brim ring)
   const hatSeat = new THREE.Group();
-  hatSeat.position.set(0, 0.3, -0.12);
-  hatSeat.rotation.x = -0.24;
+  hatSeat.position.set(0, 0.4, -0.16);
+  hatSeat.rotation.x = -0.34;
   g.add(hatSeat);
 
   // fx: dizzy stars circling above the head and a sweat drop
@@ -298,7 +307,7 @@ export function createHead() {
 
 // ---------------------------------------------------------------------------------------------------------
 // hard hat (origin = centre of the brim ring, dome up, front +z)
-const HAT_RD = 0.64, HAT_CAP = 84 * DEG, HAT_CY = -HAT_RD * Math.cos(HAT_CAP), HAT_SX = 0.93;
+const HAT_RD = 0.58, HAT_CAP = 84 * DEG, HAT_CY = -HAT_RD * Math.cos(HAT_CAP), HAT_SX = 0.93;
 export const HAT_TOP = HAT_CY + HAT_RD;     // dome top above the ring
 
 export function createHardHat() {
@@ -311,9 +320,9 @@ export function createHardHat() {
   add(g, inner, m.hatIn, [0, HAT_CY, 0]);
   const brim = memo('hatBrim', () => {
     const s = new THREE.Shape();
-    s.absellipse(0, -0.07, 0.69 * HAT_SX + 0.04, 0.74, 0, Math.PI * 2, false);
+    s.absellipse(0, -0.06, 0.63 * HAT_SX + 0.04, 0.67, 0, Math.PI * 2, false);
     const h = new THREE.Path();
-    h.absellipse(0, 0, 0.6 * HAT_SX, 0.6, 0, Math.PI * 2, true);
+    h.absellipse(0, 0, 0.545 * HAT_SX, 0.545, 0, Math.PI * 2, true);
     s.holes.push(h);
     const geo = extrude(s, 0.03, 0.014, 28);
     geo.rotateX(-Math.PI / 2);
@@ -388,14 +397,14 @@ export function createShovel() {
 // how each thing sits in a fist (hand frame: fingers −y, thumb +z, palm toward the body)
 const FIST_C = new V3(0, -0.11, 0);
 const GRIP = {
-  hammer: { p: FIST_C.clone(), q: new QT().setFromAxisAngle(new V3(1, 0, 0), Math.PI / 2) },
+  hammer: { p: FIST_C.clone(), q: new QT().setFromRotationMatrix(new M4().makeBasis(new V3(0, 1, 0), new V3(0, 0, 1), new V3(1, 0, 0))) },
   shovel: { p: new V3(0, -0.11, 0.98), q: new QT().setFromAxisAngle(new V3(1, 0, 0), -Math.PI / 2) },
   hat:    { p: new V3(0, -0.72, 0), q: new QT().setFromAxisAngle(new V3(1, 0, 0), Math.PI / 2) },
 };
 // tools slung on his back (torso frame) when a pose needs both hands
 const BACK = {
-  hammer: { p: new V3(0.22, 0.12, -0.44), q: new QT().setFromEuler(new THREE.Euler(-0.2, 0, 0.55)) },
-  shovel: { p: new V3(-0.2, 0.92, -0.46), q: new QT().setFromEuler(new THREE.Euler(0.15, 0, Math.PI - 0.5)) },
+  hammer: { p: new V3(0.18, 0.05, -0.53), q: new QT().setFromEuler(new THREE.Euler(-0.1, 0, 0.4)) },
+  shovel: { p: new V3(0.08, 0.55, -0.56), q: new QT().setFromEuler(new THREE.Euler(0.1, 0, Math.PI - 0.4)) },
 };
 
 // ---------------------------------------------------------------------------------------------------------
@@ -523,7 +532,7 @@ const REST = {
   base: { x: 0, y: 0, z: 0, rx: 0, ry: 0, rz: 0, sq: 1 },
   hip: { x: 0, y: 0, z: 0, rx: 0, ry: 0, rz: 0 },
   torso: { rx: 0, ry: 0, rz: 0 },
-  head: { rx: -10, ry: 0, rz: 0 },
+  head: { rx: -16, ry: 0, rz: 0 },
   L: { a: 4, b: 13, fa: 9, fb: 9, hand: 'fist' },
   R: { a: 4, b: 13, fa: 9, fb: 9, hand: 'fist' },
   legL: { a: 0, b: 3, k: 0, foot: 0 },
@@ -712,8 +721,8 @@ const RUN_SPEED = +(2 * RUN.f * 2 * LEG * 0.9 * Math.sin(RUN.A * DEG)).toFixed(2
 export const SPEEDS = { idle: 0, walk: WALK_SPEED, run: RUN_SPEED, jump: 0, trip: RUN_SPEED };
 
 // right hand: the shovel resting on his right shoulder; left hand: the hammer
-const carryR = (bob = 0, extra = {}) => ({ atT: [0.27, 0.6 + bob, 0.3], pole: [1, -1, -0.1], ha: [0.08, 0.5, -0.86], hf: [0, 0.3, 1], ...extra });
-const holdL = (a = 6, fa = 40) => ({ a, b: 14, fa, fb: 6, ha: [0.05, 0.8, 0.6] });
+const carryR = (bob = 0, extra = {}) => ({ atT: [0.27, 0.6 + bob, 0.3], pole: [1, -1, -0.1], ha: [0.55, 0.42, -0.72], hf: [0, 0.3, 1], ...extra });
+const holdL = (a = 6, fa = 12) => ({ a, b: 14, fa, fb: 8, ha: [0.3, -0.72, 0.62] });
 const TOOLS = { hammer: 'handL', shovel: 'handR' };
 
 function idleSpec(t) {
@@ -722,8 +731,8 @@ function idleSpec(t) {
     ...TOOLS,
     hip: { y: -0.004 + 0.012 * br },
     torso: { rx: 1 + 1.2 * br },
-    head: { rx: -10 - 1.5 * br, rz: 3 * Math.sin(t * Math.PI * 2 / 3.7), ry: 5 * Math.sin(t * Math.PI * 2 / 5.3) },
-    L: holdL(6 + 1.5 * br, 40), R: carryR(0.01 * br),
+    head: { rx: -16 - 1.5 * br, rz: 3 * Math.sin(t * Math.PI * 2 / 3.7), ry: 5 * Math.sin(t * Math.PI * 2 / 5.3) },
+    L: holdL(6 + 1.5 * br), R: carryR(0.01 * br),
   };
 }
 
@@ -738,9 +747,9 @@ function walkSpec(t) {
     base: { y: -0.035 * sn * sn + 0.012 },
     hip: { ry: -4 * sn, rz: 2 * cs },
     torso: { rx: 3, ry: 6 * sn },
-    head: { rx: -10, ry: -4 * sn, rz: -1.5 * cs },
+    head: { rx: -16, ry: -4 * sn, rz: -1.5 * cs },
     legL: leg(1), legR: leg(-1),
-    L: holdL(6 - 16 * sn, 40 - 12 * sn), R: carryR(0.02 * Math.abs(sn)),
+    L: holdL(6 - 16 * sn, 12 - 10 * sn), R: carryR(0.02 * Math.abs(sn)),
   };
 }
 
@@ -755,9 +764,9 @@ function runSpec(t, face = 'grin') {
     base: { y: 0.065 * Math.abs(sn) - 0.02 },
     hip: { y: -0.03, rx: 8, ry: -6 * sn },
     torso: { rx: 7, ry: 9 * sn },
-    head: { rx: -16, ry: -6 * sn },
+    head: { rx: -20, ry: -6 * sn },
     legL: leg(1), legR: leg(-1),
-    L: { a: 18 - 42 * sn, b: 16, fa: 95 - 30 * sn, fb: 6, ha: [0, 0.75, 0.65] },
+    L: { a: 18 - 42 * sn, b: 18, fa: 95 - 30 * sn, fb: 8, ha: [0.25, 0.2, 0.95] },
     R: carryR(0.03 * Math.abs(cs)),
     face,
   };
@@ -795,8 +804,8 @@ const JUMP_KEYS = [
 // ---------------------------------------------------------------------------------------------------------
 // the trip gag. Times in seconds; "L-frame" = the floor frame where he lies (z measured from his feet then).
 const TRIP_DUR = 5.05;
-const TRIP_STAND = 2.15;          // where he stands up again (L-frame z); paid back during the dust-off
-const TRIP_HAT = new V3(0.5, 0, 3.05);   // where the hat comes to rest (L-frame), upside down
+const TRIP_STAND = 2.35;          // where he stands up again (L-frame z); paid back during the dust-off
+const TRIP_HAT = new V3(0.55, 0, 3.45);   // where the hat comes to rest (L-frame), upside down
 
 function tripSpeedAt(t, V) {
   if (t < 0.22) return V;
@@ -831,8 +840,8 @@ function tripKeys(ph0) {
       torso: { rx: 6 },
       head: { rx: -12 + 9 * Math.sin(w), rz: 10 * Math.cos(w), ry: 0 },
       legL: { a: 82, b: 16, k: 8, foot: 32 }, legR: { a: 82, b: 16, k: 8, foot: 32 },
-      L: { at: [0.34, 0.5, 1.15 + 0.42 + fz(t)], pole: [1, 0, -0.3], ha: [0, 0.4, 0.9] },
-      R: { at: [0.34, 0.5, 1.15 + 0.42 + fz(t)], pole: [1, 0, -0.3], ha: [0, 0.4, 0.9] },
+      L: { at: [0.34, 0.5, 1.15 + 0.42 + fz(t)], pole: [1, 0, -0.3], ha: [0.4, 0.9, 0.1] },
+      R: { at: [0.34, 0.5, 1.15 + 0.42 + fz(t)], pole: [1, 0, -0.3], ha: [0.4, 0.9, 0.1] },
       face: 'dizzy', fx: { stars: 1 },
       ...extra,
     };
@@ -848,7 +857,7 @@ function tripKeys(ph0) {
   });
   const hatGrab = (t) => {   // fist target on the near rim of the resting hat (facing frame)
     const p = TRIP_HAT.clone();
-    return [p.x - 0.05, HAT_TOP + 0.05, p.z - 0.6 + fz(t)];
+    return [p.x, 0.34, p.z - 0.5 + fz(t)];
   };
   const stand = (t, extra = {}) => ({ ...TOOLS, base: { z: Z(TRIP_STAND, t) }, L: holdL(), R: carryR(), ...extra });
   return [
@@ -872,11 +881,11 @@ function tripKeys(ph0) {
     [2.05, (t) => sit(t)],
     [2.7, (t) => sit(t)],
     [2.92, (t) => sit(t, { head: { rx: -24, ry: 12, rz: 4 }, torso: { rx: 12 }, face: 'oh', fx: { stars: 0, sweat: 1 } })],
-    [3.18, (t) => ({ ...TOOLS, base: { z: Z(1.6, t), x: 0.12 }, hip: { y: -0.4, rx: 40 }, torso: { rx: 16 }, head: { rx: -34, ry: 8 },
+    [3.18, (t) => ({ ...TOOLS, base: { z: Z(1.85, t), x: 0.12 }, hip: { y: -0.4, rx: 40 }, torso: { rx: 16 }, head: { rx: -34, ry: 8 },
       legL: { a: 50, b: 8, k: 100, foot: 20 }, legR: { a: -20, b: 6, k: 95, foot: -30 },
       L: { at: hatGrab(t), abs: true, pole: [1, -0.4, 0], hf: [0, -0.3, 1] }, R: { a: -20, b: 30, fa: 10, fb: 30, ha: [0, 0.5, -1] },
       face: 'open', fx: { sweat: 1 } })],
-    [3.4, (t) => ({ ...TOOLS, base: { z: Z(1.62, t), x: 0.1 }, hip: { y: -0.42, rx: 42 }, torso: { rx: 18 }, head: { rx: -30, ry: 6 },
+    [3.4, (t) => ({ ...TOOLS, base: { z: Z(1.88, t), x: 0.1 }, hip: { y: -0.42, rx: 42 }, torso: { rx: 18 }, head: { rx: -30, ry: 6 },
       legL: { a: 50, b: 8, k: 100, foot: 20 }, legR: { a: -20, b: 6, k: 95, foot: -30 },
       L: { at: hatGrab(t), abs: true, pole: [1, -0.4, 0], hf: [0, -0.3, 1] }, R: { a: -20, b: 30, fa: 10, fb: 30, ha: [0, 0.5, -1] },
       face: 'open' })],
@@ -915,7 +924,7 @@ export const POSE_SPECS = {
     return {
       hammer: v.other === 'hammer' ? 'handL' : 'back',
       torso: { rz: 3, ry: -5 }, head: { rx: -12, rz: 7 + 2 * w, ry: -6 },
-      R: { a: 138, b: 40, fa: 172, fb: 16 + 24 * w, hand: 'open', hp: [0, 0.3, 1] },
+      R: { a: 108, b: 62, fa: 172, fb: 26 + 22 * w, hand: 'open', hp: [0, 0.3, 1] },
       L: other,
       face: v.face || 'grin',
     };
@@ -925,8 +934,8 @@ export const POSE_SPECS = {
     const b = Math.sin(t * T2 * 1.4);
     return {
       hip: { y: 0.012 * b }, head: { rx: -12, rz: 4 * Math.sin(t * T2 * 0.7) },
-      L: { a: 42 + 5 * b, b: 26, fa: 84 + 6 * b, fb: 10, hand: 'thumb', ha: [-0.1, 1, 0.08] },
-      R: { a: 42 - 5 * b, b: 26, fa: 84 - 6 * b, fb: 10, hand: 'thumb', ha: [-0.1, 1, 0.08] },
+      L: { a: 62 + 5 * b, b: 42, fa: 100 + 6 * b, fb: 24, hand: 'thumb', ha: [-0.1, 1, 0.1] },
+      R: { a: 62 - 5 * b, b: 42, fa: 100 - 6 * b, fb: 24, hand: 'thumb', ha: [-0.1, 1, 0.1] },
       face: 'grin',
     };
   },
@@ -966,7 +975,7 @@ export const POSE_SPECS = {
     return {
       hammer: 'handR',
       base: { y: 0.015 * Math.max(0, w) }, torso: { rz: 5, rx: -2 }, head: { rx: -14, rz: 4 },
-      R: { a: 162 + 4 * w, b: 26, fa: 176, fb: 14 + 3 * w, hand: 'fist', ha: [0.15, 0.95, -0.2], hf: [0, 0, 1] },
+      R: { a: 122 + 4 * w, b: 64, fa: 166, fb: 44 + 3 * w, hand: 'fist', ha: [0.62, 0.74, 0.25], hf: [0, 0.3, 1] },
       L: akimbo,
       face: 'go',
     };
@@ -976,7 +985,7 @@ export const POSE_SPECS = {
     const d = 0.5 + 0.5 * Math.sin(t * T2 * 0.5);
     const pray = { atT: [0.06, 0.42, 0.36], pole: [1, -0.5, -0.4], hand: 'flat', hf: [0, 0.9, 0.35], hp: [-1, 0, 0] };
     const spec = {
-      hip: { rx: 18 + 6 * d, z: -0.04 }, torso: { rx: 12 + 6 * d }, head: { rx: 8 + 4 * d },
+      hip: { rx: 8 + 4 * d, z: -0.03 }, torso: { rx: 6 + 4 * d }, head: { rx: -20 + 2 * d },
       L: pray, R: pray, face: 'smile',
     };
     if (v.hat) {
@@ -1001,11 +1010,11 @@ export const POSE_SPECS = {
     // a dig cycle: push in, lever back, lift and toss
     const P = 1.5, u = (t % P) / P;
     const k = [
-      [0.0, { at: [0.08, 0.32, 0.86], dir: [-0.05, 0.86, -0.5], lean: 22 }],
-      [0.35, { at: [0.08, 0.06, 0.86], dir: [-0.05, 0.88, -0.46], lean: 30 }],
-      [0.55, { at: [0.08, 0.1, 0.84], dir: [-0.05, 0.72, -0.69], lean: 26 }],
-      [0.8, { at: [0.2, 0.42, 0.74], dir: [0.15, 0.7, -0.7], lean: 14 }],
-      [1.0, { at: [0.08, 0.32, 0.86], dir: [-0.05, 0.86, -0.5], lean: 22 }],
+      [0.0, { at: [-0.42, 0.3, 0.66], dir: [0.25, 0.85, -0.46], lean: 20 }],
+      [0.35, { at: [-0.42, 0.04, 0.68], dir: [0.25, 0.88, -0.42], lean: 28 }],
+      [0.55, { at: [-0.42, 0.06, 0.64], dir: [0.25, 0.7, -0.66], lean: 24 }],
+      [0.8, { at: [-0.62, 0.45, 0.5], dir: [0.5, 0.7, -0.5], lean: 12 }],
+      [1.0, { at: [-0.42, 0.3, 0.66], dir: [0.25, 0.85, -0.46], lean: 20 }],
     ];
     let i = 0;
     while (u > k[i + 1][0]) i++;
@@ -1016,9 +1025,9 @@ export const POSE_SPECS = {
     return {
       shovel: { in: 'base', at: mix(A.at, B.at), dir: mix(A.dir, B.dir), roll: 0 },
       hammer: 'back',
-      hip: { y: -0.08, rx: lean * 0.45 }, torso: { rx: lean * 0.55, ry: -6 }, head: { rx: -lean * 0.7 - 8 },
+      hip: { y: -0.08, rx: lean * 0.45 }, torso: { rx: lean * 0.55, ry: -6 }, head: { rx: -lean - 16 },
       legL: { a: 14, b: 6, k: 18 }, legR: { a: -12, b: 6, k: 10 },
-      R: { grab: 0.72, pole: [1, -0.6, -0.3] }, L: { grab: 1.2, pole: [1, -0.2, -0.6] },
+      R: { grab: 0.85, pole: [1, -0.6, -0.3] }, L: { grab: 1.25, pole: [1, -0.2, -0.6] },
       face: 'go',
     };
   },
@@ -1163,35 +1172,32 @@ export function createChuan({ hat = true, tools = true } = {}) {
 
   function hatPathL(t) {   // the hat's flight in the L frame after it pops off: { p, q }
     const c = tripCtx;
-    const up = new QT(), flip = new QT().setFromAxisAngle(new V3(1, 0, 0), Math.PI);
-    const B1 = new V3(0.75, 0.035, 4.45), B2 = new V3(0.68, HAT_TOP + 0.02, 5.0);
-    const H = TRIP_HAT.clone().setY(HAT_TOP + 0.02);
-    if (t < 0.92) {
+    const X = new V3(1, 0, 0), Y = new V3(0, 1, 0);
+    const B1 = new V3(0.75, 0.035, 4.45), B2 = new V3(0.7, 0.035, 5.0);
+    const H = TRIP_HAT.clone().setY(0.035);
+    const wob = (amp, tt) => new QT().setFromEuler(new THREE.Euler(amp * Math.sin(tt * 15), 0, amp * Math.cos(tt * 13.5)));
+    if (t < 0.92) {        // pops up, somersaults forward, lands on its brim
       const u = (t - 0.45) / 0.47;
       const p = c.hat0.p.clone().lerp(B1, u);
       p.y = lerp(c.hat0.p.y, B1.y, u) + 4 * 0.85 * u * (1 - u);
-      const q = c.hat0.q.clone().slerp(up, u).multiply(new QT().setFromAxisAngle(new V3(1, 0, 0), T2 * u));
+      const q = c.hat0.q.clone().slerp(new QT(), u).multiply(new QT().setFromAxisAngle(X, T2 * u));
       return { p, q };
     }
-    if (t < 1.22) {
+    if (t < 1.22) {        // a smaller bounce with a half spin
       const u = (t - 0.92) / 0.3;
       const p = B1.clone().lerp(B2, u);
-      p.y = lerp(B1.y, B2.y, u) + 4 * 0.42 * u * (1 - u);
-      return { p, q: new QT().setFromAxisAngle(new V3(1, 0, 0), Math.PI * u) };
+      p.y += 4 * 0.38 * u * (1 - u);
+      return { p, q: new QT().setFromAxisAngle(Y, Math.PI * u).multiply(wob(0.3 * Math.sin(Math.PI * u), t)) };
     }
-    const rock = (amp, w, tt) => new QT().setFromEuler(new THREE.Euler(amp * Math.sin(w * tt), 0, amp * 0.8 * Math.cos(w * tt * 0.9)));
-    if (t < 1.6) {
-      const u = (t - 1.22) / 0.38;
-      return { p: B2.clone(), q: rock(0.35 * (1 - u * 0.5), 16, t).multiply(flip) };
-    }
-    if (t < 2.3) {
+    const spin0 = new QT().setFromAxisAngle(Y, Math.PI);
+    if (t < 1.6) return { p: B2.clone(), q: spin0.clone().multiply(wob(0.32 * (1 - (t - 1.22) / 0.38 * 0.4), t)) };
+    if (t < 2.3) {         // rolls back toward him on its brim, wobbling like a spun coin
       const u = (t - 1.6) / 0.7, e = 1 - (1 - u) * (1 - u);
       const p = B2.clone().lerp(H, e);
-      const spin = new QT().setFromAxisAngle(new V3(0, 1, 0), 3.4 * T2 * e);
-      return { p, q: spin.multiply(rock(0.2, 14, t)).multiply(flip) };
+      return { p, q: new QT().setFromAxisAngle(Y, Math.PI + 2.5 * T2 * e).multiply(wob(0.22, t)) };
     }
-    const decay = Math.max(0, 1 - (t - 2.3) / 0.5);
-    return { p: H, q: new QT().setFromAxisAngle(new V3(0, 1, 0), 3.4 * T2).multiply(rock(0.2 * decay, 14, t)).multiply(flip) };
+    const decay = Math.max(0, 1 - (t - 2.3) / 0.6);
+    return { p: H, q: new QT().setFromAxisAngle(Y, Math.PI + 2.5 * T2).multiply(wob(0.22 * decay * decay, t)) };
   }
 
   function tripObjects(t) {

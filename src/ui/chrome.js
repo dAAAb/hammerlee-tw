@@ -7,7 +7,7 @@ import * as THREE from 'three';
 import { toon, toonReveal } from '../engine/toon.js';
 import { roundRect, slabFromShape, circleShape } from '../chat/shapes.js';
 import { layoutText } from '../text/layout.js';
-import { emoji, avatar } from '../models/registry.js';
+import { emoji, avatar, head } from '../models/registry.js';
 
 export const LIFT = 7;
 const HEADER_H = 3.5;
@@ -28,8 +28,10 @@ export class Chrome {
     this.anim = { send: 0, behind: 0, share: 0, hint: 0 };
   }
 
-  // rebuild for a view size (em) — called on resize and font-size change
-  build(viewW, viewH, safeTopEm = 0, safeBottomEm = 0) {
+  // rebuild for a view size — called on resize and font-size change. `unit` = world em per chrome unit:
+  // the chrome is laid out in its own units (the standard text size) so 大字 enlarges the chat, not the bars.
+  build(viewW, viewH, safeTopEm = 0, safeBottomEm = 0, unit = 1) {
+    this.unit = unit;
     this.viewW = viewW; this.viewH = viewH;
     this.safeTop = safeTopEm; this.safeBottom = safeBottomEm;
     for (const c of [...this.root.children]) { this.root.remove(c); c.traverse(o => { if (o.isMesh && o.userData.own) o.geometry.dispose(); }); }
@@ -60,7 +62,7 @@ export class Chrome {
     this.autoBtn = this.pillButton(autoW, bh, '▶ 自動聊', 'yellow', '#3a2a00', 0.78);
     this.autoBtn.group.position.set(xAuto, 0.1, by);
     header.add(this.autoBtn.group);
-    this.bigBtn = this.pillButton(bigW, bh, '大字', 'white', '#163c84', 0.82);
+    this.bigBtn = this.pillButton(bigW, bh, this.flags.big ? '標準' : '大字', 'white', '#163c84', 0.82);
     this.bigBtn.group.position.set(xBig, 0.1, by);
     header.add(this.bigBtn.group);
     this.header = header;
@@ -83,7 +85,7 @@ export class Chrome {
     this.root.add(bar);
 
     // floating chips above the bar
-    this.byeChip = this.pillButton(6.7, 1.85, '👋 跟川伯說掰掰', 'yellow', '#3a2a00', 0.76, 'wave');
+    this.byeChip = this.pillButton(6.7, 1.85, '👋 跟川伯說掰掰', 'yellow', '#3a2a00', 0.76, 'head');
     this.root.add(this.byeChip.group);
     this.downBtn = this.roundButton(2.3, 'sky');
     this.root.add(this.downBtn);
@@ -122,8 +124,8 @@ export class Chrome {
     let str = label, x0 = 0;
     if (icon || label.startsWith('👋')) {
       str = label.replace('👋 ', '');
-      const e = emoji(icon || 'wave');
-      e.scale.setScalar(1.05);
+      const e = icon === 'head' || !icon ? head() : emoji(icon);
+      e.scale.setScalar(icon === 'head' || !icon ? 0.55 : 1.05);
       x0 = 1.2;
       e.position.set(0.95, 0.45, h / 2 + 0.05);
       g.add(e);
@@ -246,7 +248,7 @@ export class Chrome {
 
   // screen rectangles (CSS px) of tappable chrome, for the HTML hit layer
   layoutButtons() {
-    const em = this.stage.emPx, vw = this.viewW, vh = this.viewH;
+    const em = this.stage.emPx * this.unit, vw = this.viewW, vh = this.viewH;
     const px = (sx, sy) => ({ x: (sx + vw / 2) * em, y: (vh / 2 - sy) * em });
     const rects = [];
     const top = vh / 2;
@@ -268,9 +270,9 @@ export class Chrome {
 
   // follow the camera every frame; t = seconds, for little idle motions
   update(t, dt) {
-    const st = this.stage, k = st.camera.shear, tgt = st.rig.target;
+    const st = this.stage, k = st.camera.shear, tgt = st.rig.target, u = this.unit;
     const vw = this.viewW, vh = this.viewH;
-    const place = (obj, sx, sy, y = LIFT) => obj.position.set(tgt.x + sx - k.x * y, y, tgt.z - sy + k.y * y);
+    const place = (obj, sx, sy, y = LIFT) => { obj.position.set(tgt.x + sx * u - k.x * y, y, tgt.z - sy * u + k.y * y); obj.scale.setScalar(u); };
     place(this.header, 0, vh / 2, LIFT);   // local origin: top edge, local +z goes down the screen
     place(this.bar, 0, -vh / 2 + this.barH, LIFT);
     // the bar's local origin is its top edge
@@ -279,12 +281,12 @@ export class Chrome {
     const b = this.anim.behind;
     this.downBtn.visible = b > 0.02;
     place(this.downBtn, vw / 2 - 0.55 - 1.15, above + 1.75 - (1 - b) * 3, LIFT - 0.6);
-    this.downBtn.scale.setScalar(Math.max(0.01, b));
+    this.downBtn.scale.setScalar(u * Math.max(0.01, b));
     this.anim.hint += ((this.flags.hint ? 1 : 0) - this.anim.hint) * Math.min(1, dt * 6);
     const hk = this.anim.hint;
     this.hint.group.visible = hk > 0.02;
     place(this.hint.group, -(8.6 + 1.9) / 2, above + 5.6 + Math.abs(Math.sin(t * 3.2)) * 0.6 - (1 - hk) * 2, LIFT - 0.3);
-    this.hint.group.scale.setScalar(Math.max(0.01, hk));
+    this.hint.group.scale.setScalar(u * Math.max(0.01, hk));
     const showBye = this.flags.bye && !this.flags.ended;
     this.byeChip.group.visible = showBye;
     place(this.byeChip.group, -vw / 2 + 0.55, above + 2.35, LIFT - 0.6);
@@ -292,7 +294,7 @@ export class Chrome {
     // send button squash after a send
     this.anim.send = Math.max(0, this.anim.send - dt * 3);
     const s = 1 - Math.sin(this.anim.send * Math.PI) * 0.18;
-    this.sendBtn.scale.set(s, 1, s);
+    this.sendBtn.scale.set(s, 1, s);   // (inside the bar, which carries the unit scale)
     if (this.mode === 'share') this.sendBtn.userData.share.position.y = Math.abs(Math.sin(t * 3)) * 0.25;
     for (const e of this.typing.emojis) e.userData.tick?.(t);
     this.autoBtn.group.position.y = 0.1 + (this.flags.auto ? Math.abs(Math.sin(t * 4)) * 0.15 : 0);

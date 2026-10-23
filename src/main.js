@@ -13,8 +13,17 @@ import { SHEET_CSS, openSheet, button, linkButton, para, picture, placeholder, t
 import { elderTexture, elderCanvas } from './share/elder.js';
 import { makeBadge, ensureEnvironment, shortId } from './models/badge.js';
 import { shareCard, longImage, badgeCanvas, stickerCanvas } from './share/export.js';
-import { saveFile, shareFiles, copyText, canvasBlob, shareUrl, lineShareLink, recordChat, inArtifact } from './share/platform.js';
+import { saveFile, shareFiles, copyText, canvasBlob, shareUrl, lineShareLink, recordChat, uploadShareImage, attachShareImage, inArtifact } from './share/platform.js';
 import { burst } from './fx/confetti.js';
+import { Runner } from './fx/runner.js';
+import { registerModels } from './models/registry.js';
+import { makeEmoji } from './models/emoji.js';
+import { createMeSticker } from './models/stickers-me.js';
+import { createChuanSticker } from './models/stickers-chuan.js';
+import { createChuanAvatar, createChuanHead } from './models/chuan-avatar.js';
+import { createChuan } from './models/chuan.js';
+
+registerModels({ makeEmoji, createMeSticker, createChuanSticker, createChuanAvatar, createChuan, createChuanHead });
 
 const style = document.createElement('style');
 style.textContent = TEXT_LAYER_CSS + SHEET_CSS;
@@ -52,22 +61,28 @@ function loadPhoto(id) {
 const builderOpts = { photoAspect, loadPhoto, makeElder: id => elderTexture(font, id), makeBadge: () => makeBadge(chat.id, font) };
 
 let confetti = null;
+let runner = null;
 const app = new App({
   stage, font, chat, ...builderOpts,
   hooks: {
-    skipIntro: q.has('nointro'),
+    skipIntro: q.has('nointro') || matchMedia('(prefers-reduced-motion: reduce)').matches,
     tap: onTap,
     share: openShare,
     reveal(it) {
-      if (it.kind === 'badge') confetti = burst(stage.scene, new THREE.Vector3(0, 0, it.z + it.h / 2));
+      if (it.kind === 'badge') confetti = burst(stage.scene, new THREE.Vector3(0, 0, it.z + it.h / 2), matchMedia('(prefers-reduced-motion: reduce)').matches ? 24 : 90);
     },
     ended() {
       recordChat({ id: chat.id, serial, topics: chat.topics, script: SCRIPT_VERSION });
       try { localStorage.setItem('hl:mine', chat.id); } catch (e) { /* private mode */ }
     },
-    frame(dt) { if (confetti && !confetti.update(dt)) confetti = null; },
+    frame(dt) { if (confetti && !confetti.update(dt)) confetti = null; runner?.update(dt); },
+    topic() { runner?.topic(); },
+    avatarTap() { runner?.summon(); },
+    tapExtra(rc) { return runner?.hit(rc) || false; },
   },
 });
+const calm = matchMedia('(prefers-reduced-motion: reduce)').matches;
+runner = q.has('norunner') ? null : new Runner(app, createChuan, { calm });
 window.__app = app;
 if (q.has('at')) app.jumpTo(+q.get('at'));
 if (q.has('debug')) window.__hl = { stage, font, chat, builderOpts, shareCard, longImage, badgeCanvas, stickerCanvas };
@@ -185,6 +200,8 @@ function openShare() {
     requestAnimationFrame(() => setTimeout(() => {
       card = shareCard(stage, font, chat, builderOpts);
       ph.replaceWith(picture(card, '分享圖：我跟未來新北市長李四川的對話'));
+      // production: the card becomes the link preview picture
+      canvasBlob(card).then(b => uploadShareImage(serial, b)).then(u => attachShareImage(chat.id, u));
     }, 30));
     const acts = document.createElement('div'); acts.className = 'acts';
     const native = !inArtifact && !!navigator.share;
@@ -208,12 +225,15 @@ function openShare() {
 }
 
 document.getElementById('boot').classList.add('gone');
-let last = performance.now();
+// Full rate while scrolling, revealing or while 川哥 runs; half rate when the chat just sits there.
+let last = performance.now(), skip = false;
 function loop(now) {
+  requestAnimationFrame(loop);
+  const busy = app.isBusy() || runner?.state !== 'off' || !!confetti || document.querySelector('.sheet-back');
+  if (!busy && (skip = !skip)) return;
   const dt = Math.min(0.05, (now - last) / 1000);
   last = now;
   app.frame(dt);
   stage.render();
-  requestAnimationFrame(loop);
 }
 requestAnimationFrame(loop);

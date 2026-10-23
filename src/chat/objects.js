@@ -82,25 +82,28 @@ export class Builder {
   }
 
   extras(rec, it, w, h) {
-    const S = SIZES;
+    const S = it.S || SIZES;
     if (it.who === 'chuan' && it.first) {
       const av = avatar();
       av.position.set(-S.avatarGap - S.avatar / 2, 0, -S.nameH + S.avatar / 2 - 0.05);
+      av.scale.setScalar(S.avatar / SIZES.avatar);
       rec.group.add(av);
       rec.avatar = av;
       rec.hits.push({ obj: av, type: 'avatar' });
       const name = this.label('李四川', 0.15, -S.nameH + 0.62, 0.62, '#2b3f6b');
       rec.group.add(name.mesh);
     }
-    if (it.who === 'chuan' && it.time && it.kind !== 'badge') {
+    if (it.who === 'chuan' && it.time && it.kind !== 'badge' && it.kind !== 'cover') {
       const t = this.label(it.time, w + 0.3, h - 0.15, 0.48);
       rec.group.add(t.mesh);
     }
     if (it.who === 'me') {
-      const t = this.label(it.time, 0, h - 0.15, 0.48);
-      t.mesh.position.x = -0.3 - t.width;
-      rec.group.add(t.mesh);
-      const r = this.label('已讀', 0, h - 0.8, 0.48);
+      if (it.time) {
+        const t = this.label(it.time, 0, h - 0.15, 0.48);
+        t.mesh.position.x = -0.3 - t.width;
+        rec.group.add(t.mesh);
+      }
+      const r = this.label('已讀', 0, it.time ? h - 0.8 : h - 0.15, 0.48);
       r.mesh.position.x = -0.3 - r.width;
       rec.group.add(r.mesh);
     }

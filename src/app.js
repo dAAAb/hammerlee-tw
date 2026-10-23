@@ -61,7 +61,9 @@ export class App {
     st.resize(cw, ch);
     st.setEmPx(this.emPxFor(cw, ch));
     const safe = safeInsets();
-    this.chrome.build(st.viewW, st.viewH, safe.top / st.emPx, safe.bottom / st.emPx);
+    const chromeEm = this.big ? st.emPx / 1.2 : st.emPx;     // the bars keep the standard size
+    const unit = chromeEm / st.emPx;                          // world em per chrome unit
+    this.chrome.build(cw / chromeEm, ch / chromeEm, safe.top / chromeEm, safe.bottom / chromeEm, unit);
     for (const [i, rec] of this.records) this.dropRecord(i, rec);
     this.layout = layoutChat(this.chat, this.font, { viewW: st.viewW, photoAspect: this.builder.photoAspect, start: this.hooks.start || new Date(), cover: true });
     this.buildTimeline();
@@ -75,7 +77,7 @@ export class App {
 
   buildTimeline() {
     const st = this.stage, em = st.emPx, vh = st.viewH;
-    const barH = this.chrome.barH, headH = this.chrome.headerH;
+    const barH = this.chrome.barH * this.chrome.unit, headH = this.chrome.headerH * this.chrome.unit;
     const items = this.layout.items;
     this.camTop = vh / 2 - headH - 1.2;                       // camera z that shows z = 0 under the header
     const camFor = z => Math.max(this.camTop, z - vh / 2 + barH + 1.6);
@@ -131,6 +133,15 @@ export class App {
     const f = Math.min(1, (p - s.S) / s.L);
     if (f < s.a) return lerp(s.camStart, s.camPre, ease(f / s.a));
     return lerp(s.camPre, s.camEnd, ease((f - s.a) / (1 - s.a)));
+  }
+
+  // something is moving: scroll catching up, an item popping in, the intro, autoplay or fast-forward
+  isBusy() {
+    if (!this.intro.done || this.auto || this.ff) return true;
+    if (Math.abs(window.scrollY - this.P) > 0.5 && this.P < this.total) return true;
+    if (this.time - (this.lastMove || 0) < 0.6) return true;
+    for (const t of this.revealed.values()) if (this.time - t < 1.4) return true;
+    return this.chrome.typing.text !== '' || this.typing.visible;
   }
 
   // testing aid: show the chat as if read up to item n (all reveals finished)
@@ -274,7 +285,8 @@ export class App {
     const leading = !this.revealed.has(s.i) && f < s.a && !this.ended;
     this.typing.visible = leading && s.pre === 'typing';
     if (this.typing.visible) {
-      this.typing.position.set(this.layout.left + 0.45 + 2.3 + 0.5, 0, it.z);
+      const S = this.layout.S;
+      this.typing.position.set(this.layout.left + S.margin + S.avatar + S.avatarGap, 0, it.z);
       this.typing.userData.tick(this.time);
     }
     if (leading && s.pre === 'field') {

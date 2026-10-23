@@ -285,7 +285,7 @@ def('thumb', G => {
 def('star', G => {
   const s = add(G, mesh(puff(starShape(0.39, 0.19), 0.3, 0.08, 3), 'yellow', 'star'));
   add(s, mesh(ell(0.065, 0.025, 0.04), 'white'), -0.1, 0.298, -0.12).rotation.y = 0.5;
-}, o => { const s = o('star'); return t => { s.rotation.y = 0.2 * Math.sin(t * 0.9); }; });
+}, o => { const s = o('star'); return t => { s.rotation.y = 0.12 * Math.sin(t * 0.9); }; });
 
 def('party', G => {
   // the popper: a striped cone, tip on the bubble at lower left, mouth up-right
@@ -317,7 +317,8 @@ def('party', G => {
     .forEach(([x, y, z, pal]) => add(conf, mesh(dg, pal), x, y, z));
 }, o => {
   const c = o('conf');
-  return t => { c.children.forEach((m, i) => { m.rotation.y += 0.02 * (i % 2 ? 1 : -1); }); c.position.y = 0.012 * Math.sin(t * 2.4); };
+  const r0 = c.children.map(m => m.rotation.y);
+  return t => { c.children.forEach((m, i) => { m.rotation.y = r0[i] + 0.6 * Math.sin(t * 1.5 + i) * (i % 2 ? 1 : -1); }); };
 });
 
 def('flower', G => {

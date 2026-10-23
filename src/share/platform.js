@@ -7,8 +7,11 @@ import { CONFIG } from '../config.js';
 export const inArtifact = typeof window !== 'undefined' && !!window.claude?.use;
 const use = name => (inArtifact ? window.claude.use(name).catch(() => null) : Promise.resolve(null));
 
+// On the public site a link goes through /s/<id> so LINE and Facebook show the share card as its preview;
+// elsewhere the id rides in the #c- anchor and the page replays it directly.
 export function shareUrl(chatId) {
-  const base = CONFIG.publicUrl || (inArtifact ? CONFIG.artifactUrl : location.origin + location.pathname);
+  if (CONFIG.publicUrl && !inArtifact) return `${CONFIG.publicUrl.replace(/\/?$/, '/')}s/${chatId}`;
+  const base = inArtifact ? CONFIG.artifactUrl : location.origin + location.pathname;
   return `${base}#c-${chatId}`;
 }
 
@@ -81,10 +84,21 @@ export async function recordChat(rec) {
 export async function uploadShareImage(serial, blob) {
   if (!CONFIG.supabaseUrl || inArtifact) return null;
   const path = `og/${serial}.png`;
-  const r = await fetch(`${CONFIG.supabaseUrl}/storage/v1/object/${path}`, {
+  const r = await fetch(`${CONFIG.supabaseUrl}/storage/v1/object/og/${path}`, {
     method: 'POST',
     headers: { apikey: CONFIG.supabaseAnonKey, Authorization: `Bearer ${CONFIG.supabaseAnonKey}`, 'Content-Type': 'image/png', 'x-upsert': 'false' },
     body: blob,
   }).catch(() => null);
-  return r && (r.ok || r.status === 409) ? `${CONFIG.supabaseUrl}/storage/v1/object/public/${path}` : null;
+  if (!r || !(r.ok || r.status === 409)) return null;
+  const pub = `${CONFIG.supabaseUrl}/storage/v1/object/public/og/${path}`;
+  return pub;
+}
+
+export async function attachShareImage(id, imageUrl) {
+  if (!CONFIG.supabaseUrl || inArtifact || !imageUrl) return;
+  await fetch(`${CONFIG.supabaseUrl}/rest/v1/chats?id=eq.${id}&og_image=is.null`, {
+    method: 'PATCH',
+    headers: { apikey: CONFIG.supabaseAnonKey, Authorization: `Bearer ${CONFIG.supabaseAnonKey}`, 'Content-Type': 'application/json', Prefer: 'return=minimal' },
+    body: JSON.stringify({ og_image: imageUrl }),
+  }).catch(() => null);
 }

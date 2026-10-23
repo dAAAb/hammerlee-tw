@@ -6,7 +6,7 @@
 import * as THREE from 'three';
 import { toon } from '../engine/toon.js';
 import { STICKERS } from './catalog.js';
-import { createMascot, setMascotPose } from './mascot.js';
+import { createMascot, setMascotPose, MASCOT_SCALE } from './mascot.js';
 
 export const ME_STICKER_IDS = Object.keys(STICKERS).filter(id => STICKERS[id].who === 'me');
 const POSE_OF = {
@@ -15,7 +15,7 @@ const POSE_OF = {
 };
 
 const TEXT_TOP = '#1c2442';
-const PLATE_Z = 1.56, PLATE_D = 1.5, PLATE_H = 0.26, BASE_Z = -0.78, FIG_Z = -0.82;
+const PLATE_Z = 1.52, PLATE_D = 1.5, PLATE_H = 0.26, BASE_Z = -0.84, FIG_Z = -0.9, FIG_S = 1.12 / MASCOT_SCALE;
 
 function rrShape(w, d, r) {
   r = Math.max(0.001, Math.min(r, w / 2 - 0.0005, d / 2 - 0.0005));
@@ -39,7 +39,7 @@ function mesh(geo, mat) { const m = new THREE.Mesh(geo, mat); m.castShadow = tru
 // shared stage pieces
 let BASE = null;
 function baseGeos() {
-  if (!BASE) BASE = { top: disc(1.3, 0.22, 0.07), rim: disc(1.42, 0.12, 0.04) };
+  if (!BASE) BASE = { top: disc(1.38, 0.22, 0.07), rim: disc(1.5, 0.12, 0.04) };
   return BASE;
 }
 const plateCache = new Map();
@@ -79,11 +79,12 @@ export function createMeSticker(id, font) {
   // round stage under 小新
   const bg = baseGeos();
   const rim = mesh(bg.rim, toon('teal')); rim.position.set(0, 0, BASE_Z); pop.add(rim);
-  const top = mesh(bg.top, toon('yellow', { receive: 0.55 })); top.position.set(0, 0.02, BASE_Z); top.receiveShadow = true; pop.add(top);
+  const top = mesh(bg.top, toon('yellow', { receive: 0.3 })); top.position.set(0, 0.02, BASE_Z); top.receiveShadow = true; pop.add(top);
 
   const fig = createMascot();
   setMascotPose(fig, pose);
   fig.position.set(0, 0.23, FIG_Z);
+  fig.scale.setScalar(FIG_S);
   pop.add(fig);
 
   // the words on a plate

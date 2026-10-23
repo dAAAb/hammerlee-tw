@@ -2,6 +2,7 @@
 // exists, a simple stand-in keeps the chat working.
 import * as THREE from 'three';
 import { toon } from '../engine/toon.js';
+import { bakedClone } from '../engine/bake.js';
 
 export const models = {
   makeEmoji: null,           // (name) => Group, ~1 em footprint
@@ -9,6 +10,7 @@ export const models = {
   createMeSticker: null,     // (id, font) => Group
   createChuanAvatar: null,   // () => Group, 2.3 em coin
   createChuan: null,         // (opts) => runner rig
+  createChuanHead: null,     // () => Group, just his head
 };
 
 export function registerModels(impl) { Object.assign(models, impl); }
@@ -35,8 +37,13 @@ export function sticker(id, font, who) {
   return g;
 }
 
+export function head() {
+  if (models.createChuanHead) { try { return bakedClone('head', models.createChuanHead); } catch (e) { console.warn('head', e); } }
+  return emoji('smile');
+}
+
 export function avatar() {
-  if (models.createChuanAvatar) { try { return models.createChuanAvatar(); } catch (e) { console.warn('avatar', e); } }
+  if (models.createChuanAvatar) { try { return bakedClone('avatar', models.createChuanAvatar); } catch (e) { console.warn('avatar', e); } }
   const g = new THREE.Group();
   const m = new THREE.Mesh(new THREE.CylinderGeometry(1.15, 1.15, 0.45, 32), toon('sky'));
   m.position.y = 0.22; m.castShadow = true;
