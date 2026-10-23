@@ -245,7 +245,7 @@ export class App {
       this.log.append(line);
       while (this.log.childNodes.length > 6) this.log.firstChild.remove();
     }
-    this.hooks.reveal?.(it, i);
+    this.hooks.reveal?.(it, i, this.layout.items.length);
   }
 
   finish() {
@@ -393,6 +393,7 @@ export class App {
       case 'share': this.hooks.share?.(); break;
       case 'settings': this.hooks.settings?.(); break;
     }
+    this.hooks.press?.(id);
   }
 
   // the send button / field: jump to the end of the current item (for people who prefer tapping)
