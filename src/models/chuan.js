@@ -28,7 +28,8 @@ export const DIM = {
   upper: 0.33, lower: 0.31, fist: 0.115,
 };
 const FACE = 11;             // elevation (deg) of the face centre on the head sphere
-const BELLY = 0.36;          // base height that rests his tummy on the floor when he lies flat
+const BELLY = 0.36;
+const SCALE = 0.95;          // whole-figure scale (the rig is modelled a little big): ~3.0 em with the hat          // base height that rests his tummy on the floor when he lies flat
 
 // ---------------------------------------------------------------------------------------------------------
 // materials (shared toon materials; never disposed)
@@ -36,7 +37,8 @@ let MAT = null;
 function mats() {
   if (MAT) return MAT;
   MAT = {
-    skin: toon('skin'), hair: toon({ l: '#5b5551', m: '#34302d', d: '#191715' }), shirt: toon('shirt'), pants: toon('pants'), white: toon('white'),
+    skin: toon('skin'), hair: toon({ l: '#433e3a', m: '#2a2624', d: '#141211' }),
+    stubble: toon({ l: '#7a736c', m: '#5d5751', d: '#34302c' }), shirt: toon('shirt'), pants: toon('pants'), white: toon('white'),
     yellow: toon('yellow'), navy: toon('navy'), metal: toon('metal'), wood: toon('wood'), dark: toon('dark'),
     gold: toon('gold'), red: toon('red'), sky: toon('sky'),
     shoe: toon({ l: '#6a5444', m: '#47372c', d: '#261c16' }),
@@ -130,16 +132,17 @@ const sdir = (el, az) => new V3(Math.sin(az * DEG) * Math.cos(el * DEG), Math.si
 // ---------------------------------------------------------------------------------------------------------
 // head
 
-// Crew cut: a cap over the top of the head cut by a plane tilted back (high hairline in front, sideburns at the
-// ears, low at the back), with the very top pressed flat.
-function hairGeo() {
-  return memo('hair', () => {
-    const R = DIM.headR, Rh = R * 1.035;
-    const tilt = 36 * DEG, lift = 8 * DEG;
-    const capAng = Math.acos(Math.sin(lift) * R / Rh);
+// Crew cut: caps over the head cut by planes tilted back (high hairline in front, low at the back) with the very
+// top pressed flat. Two layers: short grey-black stubble down to the ears, and the darker flat top over it.
+function hairGeo(layer = 'top') {
+  return memo('hair' + layer, () => {
+    const R = DIM.headR;
+    const [k, tilt, lift, flat] = layer === 'top' ? [1.055, 20, 26, 0.87] : [1.03, 36, 8, 0.84];
+    const Rh = R * k;
+    const capAng = Math.acos(Math.sin(lift * DEG) / k);
     const g = new THREE.SphereGeometry(Rh, 28, 18, 0, Math.PI * 2, 0, capAng);
-    g.rotateX(-tilt);
-    const pos = g.attributes.position, nrm = g.attributes.normal, top = R * 0.9;
+    g.rotateX(-tilt * DEG);
+    const pos = g.attributes.position, nrm = g.attributes.normal, top = R * flat;
     for (let i = 0; i < pos.count; i++) if (pos.getY(i) > top) { pos.setY(i, top); nrm.setXYZ(i, 0, 1, 0); }
     return g;
   });
@@ -148,7 +151,7 @@ function hairGeo() {
 function skullGeo() {
   return memo('skull', () => {
     const R = DIM.headR, g = new THREE.SphereGeometry(R, 28, 20);
-    const pos = g.attributes.position, nrm = g.attributes.normal, top = R * 0.86;
+    const pos = g.attributes.position, nrm = g.attributes.normal, top = R * 0.8;
     for (let i = 0; i < pos.count; i++) if (pos.getY(i) > top) { pos.setY(i, top); nrm.setXYZ(i, 0, 1, 0); }
     return g;
   });
@@ -205,10 +208,14 @@ export const EXPRESSIONS = Object.keys(EXPR);
 // tick(t) }. hatSeat is where a hard hat sits; fx holds the dizzy stars and the sweat drop.
 export function createHead() {
   const m = mats(), R = DIM.headR;
+  const outer = new THREE.Group();
+  outer.name = 'chuanHead';
   const g = new THREE.Group();
-  g.name = 'chuanHead';
+  g.scale.set(1.05, 0.95, 1.0);
+  outer.add(g);
   add(g, skullGeo(), m.skin);
-  add(g, hairGeo(), m.hair);
+  add(g, hairGeo('sides'), m.stubble);
+  add(g, hairGeo('top'), m.hair);
   const place = (o, el, az, r) => { const n = sdir(el, az); o.position.copy(n).multiplyScalar(r); o.quaternion.copy(tangentQ(n)); g.add(o); return o; };
   const mesh = (geo, mat) => { const o = new THREE.Mesh(geo, mat); o.castShadow = true; return o; };
 
@@ -260,13 +267,14 @@ export function createHead() {
 
   // hard-hat seat (the hat's origin is the centre of its brim ring)
   const hatSeat = new THREE.Group();
-  hatSeat.position.set(0, 0.4, -0.16);
+  hatSeat.position.set(0, 0.38, -0.16);
   hatSeat.rotation.x = -0.34;
-  g.add(hatSeat);
+  hatSeat.scale.set(1.03, 1, 1);
+  outer.add(hatSeat);
 
   // fx: dizzy stars circling above the head and a sweat drop
   const fx = new THREE.Group();
-  g.add(fx);
+  outer.add(fx);
   const stars = new THREE.Group();
   stars.position.set(0, 0.86, 0);
   fx.add(stars);
@@ -302,7 +310,7 @@ export function createHead() {
     stars.visible = starsOn; sweat.visible = sweatOn;
     if (starsOn) stars.rotation.y = t * 5;
   }
-  return { group: g, hatSeat, fx, setFace, setFx };
+  return { group: outer, hatSeat, fx, setFace, setFx };
 }
 
 // ---------------------------------------------------------------------------------------------------------
@@ -720,7 +728,7 @@ const RUN = { f: 2.4, A: 34 };
 const LEG = DIM.thigh + DIM.shin;
 const WALK_SPEED = +(2 * WALK.f * 2 * LEG * 0.97 * Math.sin(WALK.A * DEG)).toFixed(2);
 const RUN_SPEED = +(2 * RUN.f * 2 * LEG * 0.9 * Math.sin(RUN.A * DEG)).toFixed(2);
-export const SPEEDS = { idle: 0, walk: WALK_SPEED, run: RUN_SPEED, jump: 0, trip: RUN_SPEED };
+export const SPEEDS = { idle: 0, walk: +(WALK_SPEED * SCALE).toFixed(2), run: +(RUN_SPEED * SCALE).toFixed(2), jump: 0, trip: +(RUN_SPEED * SCALE).toFixed(2) };
 
 // right hand: the shovel resting on his right shoulder; left hand: the hammer
 const carryR = (bob = 0, extra = {}) => ({ atT: [0.27, 0.6 + bob, 0.3], pole: [1, -1, -0.1], ha: [0.55, 0.42, -0.72], hf: [0, 0.3, 1], ...extra });
@@ -994,7 +1002,7 @@ export const POSE_SPECS = {
       spec.hat = { in: 'torso', p: [0, 0.4, 0.44], r: [-30, 0, 0], aa: [0, 1, 1, 180] };
       spec.L = { atT: [0.5, 0.42, 0.5], pole: [1, -0.5, -0.4], hand: 'fist', hf: [-1, 0, 0.25], ha: [0, 0.5, 0.85] };
       spec.R = spec.L;
-      spec.head = { rx: 2 + 6 * d };
+      spec.head = { rx: -18 + 3 * d };
     }
     return spec;
   },
@@ -1002,10 +1010,10 @@ export const POSE_SPECS = {
   salute: (t) => {
     const w = Math.sin(t * T2 * 1.0);
     return {
-      base: { y: 0.008 * w }, head: { rx: -8, rz: 6 },
-      R: { atT: [0.43, 1.42, 0.32], pole: [1, 0.25, -0.35], hand: 'flat', hf: [-0.6, 0.75, 0.1], hp: [0.15, -0.2, 1] },
+      base: { y: 0.008 * w }, head: { rx: -10, rz: 10 },
+      R: { atT: [0.56, 1.26, 0.3], pole: [1, 0.1, -0.4], hand: 'flat', hf: [-0.45, 0.85, 0.15], hp: [0.15, -0.1, 1] },
       L: { a: 1, b: 7, fa: 1, fb: 6, hand: 'flat', hp: [-1, 0, 0] },
-      face: 'go',
+      face: 'open',
     };
   },
 
@@ -1014,8 +1022,8 @@ export const POSE_SPECS = {
     const P = 1.5, u = (t % P) / P;
     const k = [
       [0.0, { at: [-0.75, 0.3, 0.85], dir: [0.6, 0.7, -0.4], lean: 18 }],
-      [0.35, { at: [-0.75, 0.03, 0.88], dir: [0.58, 0.74, -0.36], lean: 26 }],
-      [0.55, { at: [-0.72, 0.06, 0.85], dir: [0.6, 0.58, -0.55], lean: 22 }],
+      [0.35, { at: [-0.75, 0.16, 0.88], dir: [0.58, 0.74, -0.36], lean: 26 }],
+      [0.55, { at: [-0.72, 0.18, 0.85], dir: [0.6, 0.58, -0.55], lean: 22 }],
       [0.8, { at: [-0.88, 0.5, 0.62], dir: [0.75, 0.55, -0.36], lean: 12 }],
       [1.0, { at: [-0.75, 0.3, 0.85], dir: [0.6, 0.7, -0.4], lean: 18 }],
     ];
@@ -1077,6 +1085,7 @@ function mirrorSpec(sp) {
 export function createChuan({ hat = true, tools = true } = {}) {
   const m = mats();
   const rig = buildRig();
+  rig.facing.scale.setScalar(SCALE);
   const useHammer = tools === true || (tools && tools.hammer);
   const useShovel = tools === true || (tools && tools.shovel);
   const hatObj = hat ? createHardHat() : null;
@@ -1270,7 +1279,7 @@ export function createChuan({ hat = true, tools = true } = {}) {
     if (tripHat && name !== 'trip') endTrip();
     const prev = mode;
     if (name === 'jump') {
-      if (prev.name === 'jump') return;
+      if (prev.name === 'jump' || (prev.kind === 'motion' && prev.name === 'trip')) return;   // no hop mid-tumble
       resume = prev.name === 'trip' ? { kind: 'motion', name: 'run', t: 0 } : { ...prev };
     }
     if (name === 'trip') {
@@ -1313,7 +1322,7 @@ export function createChuan({ hat = true, tools = true } = {}) {
     // live forward speed in em/s: move group along the facing direction by speed * dt every frame
     get speed() {
       if (mode.kind !== 'motion') return 0;
-      if (mode.name === 'trip') return tripSpeedAt(mode.t, RUN_SPEED);
+      if (mode.name === 'trip') return tripSpeedAt(mode.t, RUN_SPEED) * SCALE;
       if (mode.name === 'jump') return 0;
       return SPEEDS[mode.name] || 0;
     },

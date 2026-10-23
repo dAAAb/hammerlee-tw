@@ -12,8 +12,8 @@ import { slabFromShape, roundRect } from '../chat/shapes.js';
 
 const FIG_Z = -0.95;          // where he stands
 const BASE_R = 1.42, BASE_H = 0.16;
-const FIG_S = 1.18;          // the figure a bit bigger than in the chat so poses read
-const PLATE_Z = 1.42, PLATE_D = 1.42, PLATE_H = 0.26, PLATE_MAX_W = 5.3;
+const FIG_S = 1.22;          // the figure a bit bigger than in the chat so poses read
+const PLATE_Z = 1.42, PLATE_D = 1.42, PLATE_H = 0.26, PLATE_MAX_W = 5.2;
 const TEXT_TOP = '#10306e';
 
 // per-sticker flavour: plate colour, tools, pose variant, little extras
@@ -29,7 +29,7 @@ const LOOK = {
   c_bye:    { plate: 'yellow', tools: { hammer: true }, v: { mirror: true, other: 'hammer', face: 'wink' } },
   c_shovel: { plate: 'yellow', tools: { shovel: true }, extras: ['dirt'] },
   c_think:  { plate: 'white', extras: ['dots'] },
-  c_run:    { plate: 'yellow', tools: true, extras: ['dust'] },
+  c_run:    { plate: 'yellow', tools: true, extras: ['dust'], yaw: 0.55 },
   c_cheer:  { plate: 'yellow', extras: ['sparkle'] },
   c_thanks: { plate: 'yellow', v: { hat: true } },
   c_vote:   { plate: 'yellow', v: { other: 'point' }, extras: ['sparkle'] },
@@ -88,6 +88,7 @@ export function createChuanSticker(id, font) {
   chuan.group.position.y = BASE_H + 0.02;
   chuan.group.scale.setScalar(FIG_S);
   chuan.setPose(def.pose, 1, look.v || {});
+  if (look.yaw) chuan.setFacing(look.yaw);
   stand.add(chuan.group);
 
   // --- the text plate
@@ -153,7 +154,8 @@ export function createChuanSticker(id, font) {
     const ps = [0, 1, 2].map(() => mesh(g.puff, toon('white'), stand, [0, 0.15, -0.8], null, 0.1));
     fx.push((t) => ps.forEach((o, i) => {
       const u = ((t * 1.6 + i / 3) % 1);
-      o.position.set((i - 1) * 0.35, 0.18 + 0.3 * u, -0.5 - 0.9 * u);
+      const d = 0.45 + 0.8 * u, side = (i - 1) * 0.3;
+      o.position.set(-0.52 * d - 0.85 * side, BASE_H + 0.1 + 0.3 * u, -0.85 * d + 0.52 * side);
       o.scale.setScalar(0.06 + 0.2 * Math.sin(Math.PI * u));
     }));
   }

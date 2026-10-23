@@ -58,20 +58,29 @@ export class App {
     const st = this.stage;
     const keep = this.timeline ? this.progressAnchor() : null;
     const cw = st.canvas.clientWidth || window.innerWidth, ch = st.canvas.clientHeight || window.innerHeight;
+    const em = this.emPxFor(cw, ch);
+    // Only the height changed (a phone's address bar sliding away) and the text size stays: the chat layout
+    // depends on width alone, so keep every built message and just re-aim the camera and the bars.
+    const soft = this.layout && cw === this._lastW && Math.abs(em - st.emPx) < 0.01 && this.big === this._lastBig;
+    this._lastW = cw; this._lastBig = this.big;
     st.resize(cw, ch);
-    st.setEmPx(this.emPxFor(cw, ch));
+    st.setEmPx(em);
     const safe = safeInsets();
     const chromeEm = this.big ? st.emPx / 1.2 : st.emPx;     // the bars keep the standard size
     const unit = chromeEm / st.emPx;                          // world em per chrome unit
     this.chrome.build(cw / chromeEm, ch / chromeEm, safe.top / chromeEm, safe.bottom / chromeEm, unit);
-    for (const [i, rec] of this.records) this.dropRecord(i, rec);
-    this.layout = layoutChat(this.chat, this.font, { viewW: st.viewW, photoAspect: this.builder.photoAspect, start: this.hooks.start || new Date(), cover: true });
+    if (!soft) {
+      for (const [i, rec] of this.records) this.dropRecord(i, rec);
+      this.hooks.relayout?.();
+      this.layout = layoutChat(this.chat, this.font, { viewW: st.viewW, photoAspect: this.builder.photoAspect, start: this.hooks.start || new Date(), cover: true });
+    }
     this.buildTimeline();
-    this.scroller.style.height = (this.total + window.innerHeight) + 'px';
-    if (keep) {
+    this.scroller.style.height = (this.total + window.innerHeight + 80) + 'px';   // a little slack so the very end is always reachable
+    if (keep && !soft) {
       this.P = this.fromAnchor(keep.p); this.Pmax = this.fromAnchor(keep.max);
       window.scrollTo(0, this.P);
     }
+    this._hitKey = '';
     this.stage.dirty = true;
   }
 

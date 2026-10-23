@@ -55,7 +55,7 @@ export function createChuanAvatar() {
   head.setFace('grin');
   const hs = 0.86;
   head.group.scale.setScalar(hs);
-  head.group.position.set(0, 0.79, -0.02);
+  head.group.position.set(0, 0.77, -0.02);
   head.group.rotation.x = -24 * DEG;
   fig.add(head.group);
 
