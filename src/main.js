@@ -15,6 +15,7 @@ import { elderTexture, elderCanvas } from './share/elder.js';
 import { makeBadge, ensureEnvironment, shortId } from './models/badge.js';
 import { shareCard, longImage, badgeCanvas, stickerCanvas, renderSnippet, pickSnippet, buildCard } from './share/export.js';
 import { saveFile, shareFiles, copyText, canvasBlob, shareUrl, lineShareLink, recordChat, uploadShareImage, attachShareImage, inArtifact } from './share/platform.js';
+import { initAnalytics, setAnalytics, track, trackThen } from './share/analytics.js';
 import { burst } from './fx/confetti.js';
 import { Runner } from './fx/runner.js';
 import { Builds, BUILDS, TIERS, collection } from './fx/builds.js';
@@ -38,6 +39,11 @@ style.textContent = TEXT_LAYER_CSS + SHEET_CSS + PAIR_CSS;
 document.head.append(style);
 
 const q = new URLSearchParams(location.search);
+// viewer settings, remembered on this device only
+const SETTINGS_KEY = 'hl:settings';
+const saved = (() => { try { return JSON.parse(localStorage.getItem(SETTINGS_KEY) || '{}'); } catch (e) { return {}; } })();
+// usage statistics start before the letters load, so quick visits count too (設定 can turn them off)
+initAnalytics(saved.stats !== false, { dry: q.has('ga-dry') });
 const stage = new Stage(document.getElementById('stage'));
 const [font, photoAspect] = await Promise.all([
   GlyphFont.load('glyphs.txt'),
@@ -55,6 +61,8 @@ const m = location.hash.match(/^#c-([0-9A-Fa-f]+)$/);
 const replay = !!m;
 const chat = replay ? replayChat(m[1]) : randomChat();
 const serial = shortId(chat.id);
+const mode = replay ? 'replay' : 'own';
+if (replay) track('replay_view');
 
 const textures = new Map();
 const loader = new THREE.TextureLoader();
@@ -73,14 +81,9 @@ let runner = null;
 let scenery = null;
 let builds = null;
 
-// viewer settings, remembered on this device only
-const SETTINGS_KEY = 'hl:settings';
 // the look defaults are the easiest to read; people can make it more 3D or more hand-drawn in 設定
 const LOOK_DEFAULTS = { depth: TEXT_DEPTH, shadow: 1, hand: 1 };
-const settings = (() => {
-  const base = { sound: false, vibrate: false, tilt: false, pair: false, ...LOOK_DEFAULTS };
-  try { return { ...base, ...JSON.parse(localStorage.getItem(SETTINGS_KEY) || '{}') }; } catch (e) { return base; }
-})();
+const settings = { sound: false, vibrate: false, tilt: false, stats: true, pair: false, ...LOOK_DEFAULTS, ...saved };
 function applyLook() {
   textLook.depth = settings.depth;
   setShadowStrength(settings.shadow);
@@ -92,6 +95,14 @@ const tilt = new Tilt(stage);
 // sound needs a tap before it may play, so a remembered "on" starts at the first touch
 if (settings.sound || settings.vibrate) addEventListener('pointerdown', () => setFeel({ sound: settings.sound, vibrate: settings.vibrate }), { once: true });
 if (settings.tilt) addEventListener('pointerdown', () => tilt.enable(), { once: true });
+// how far people get: the first message, then each quarter of the chat
+let started = false, quarters = 0;
+function progress(it, i, n) {
+  if (it.kind === 'cover' || it.kind === 'date') return;
+  if (!started) { started = true; track('chat_start', { mode }); }
+  const k = Math.min(3, Math.floor(4 * (i + 1) / n));
+  while (quarters < k) track('chat_progress', { percent: ++quarters * 25, mode });
+}
 const app = new App({
   stage, font, chat, ...builderOpts,
   hooks: {
@@ -99,24 +110,33 @@ const app = new App({
     replay,
     tap: onTap,
     share: openShare,
-    reveal(it) {
+    reveal(it, i, n) {
+      progress(it, i, n);
       scenery?.reveal(it);
       if (it.kind === 'badge') confetti = burst(stage.scene, new THREE.Vector3(0, 0, it.z + it.h / 2), matchMedia('(prefers-reduced-motion: reduce)').matches ? 24 : 90);
     },
     ended() {
+      track('chat_complete', { mode });
       recordChat({ id: chat.id, serial, topics: chat.topics, script: SCRIPT_VERSION });
       try { localStorage.setItem('hl:mine', chat.id); } catch (e) { /* private mode */ }
     },
     frame(dt) { if (confetti && !confetti.update(dt)) confetti = null; runner?.update(dt); builds?.update(dt); scenery?.update(dt); },
     relayout() { scenery?.reset(); builds?.reset(); },
-    topic() { runner?.topic(); },
+    topic(t) { runner?.topic(); track('topic_view', { topic: t.id, category: t.cat }); },
     avatarTap() { runner?.summon(); },
     tapExtra(rc, d, at) {
       // 川哥 himself, then a build, then the finger-sized area around him
-      if (runner?.hit(rc)) return true;
+      if (runner?.hit(rc)) { track('runner_tap'); return true; }
       const b = builds?.hit(rc);
       if (b) { openBuild(b); return true; }
-      return runner?.hit(rc, at) || false;
+      const hit = runner?.hit(rc, at) || false;
+      if (hit) track('runner_tap');
+      return hit;
+    },
+    press(id) {
+      if (id === 'bye') track('fast_forward');
+      else if (id === 'auto') track('auto_chat', { state: app.auto ? 'on' : 'off' });
+      else if (id === 'big') track('setting_change', { setting: 'big_text', state: app.big ? 'on' : 'off' });
     },
     settings: openSettings,
     feel(it) { const n = soundFor(it); if (n) play(n); },
@@ -124,12 +144,16 @@ const app = new App({
     tilt(dt) { tilt.update(dt); },
   },
 });
+// starting over reloads the page, so the event goes out first
+const restart = (name, params) => trackThen(name, params, () => { location.hash = ''; location.reload(); });
+
 const calm = matchMedia('(prefers-reduced-motion: reduce)').matches;
 // 川哥's builds: a model rises beside him now and then; tap it for its card
 builds = new Builds(app, createScenery, {
   onBuilt(s) {
     const rare = s.b.tier === 'SSR' || s.b.tier === 'UR';
     play(rare ? 'badge' : 'built');
+    track('build_made', { item_type: s.b.tier, item_id: s.b.id });
     if (rare) confetti = burst(stage.scene, new THREE.Vector3(s.x, 0, s.z), calm ? 20 : 60);
     toast(`${s.count[s.b.id] === 1 ? '新！' : ''}川哥蓋好了${s.b.tier}「${s.b.name}」，點一下看看`, 3600);
   },
@@ -187,7 +211,7 @@ async function shareCanvas(cv, name, text) {
   if (!ok) { await copyText(shareUrl(chat.id)); toast('邀請連結已複製'); }
 }
 
-function viewer({ title, canvas, src, filename, alt, shareText }) {
+function viewer({ title, canvas, src, filename, alt, shareText, kind = 'item' }) {
   openSheet({ title }, sheet => {
     sheet.append(canvas ? picture(canvas, alt) : picture(src, alt));
     const acts = document.createElement('div');
@@ -198,8 +222,9 @@ function viewer({ title, canvas, src, filename, alt, shareText }) {
       const c = document.createElement('canvas'); c.width = img.naturalWidth; c.height = img.naturalHeight; c.getContext('2d').drawImage(img, 0, 0);
       return c;
     };
-    acts.append(button('下載圖片', async () => saveCanvas(await getCanvas(), filename), 'main'));
+    acts.append(button('下載圖片', async () => { track('share', { method: 'download', content_type: kind }); saveCanvas(await getCanvas(), filename); }, 'main'));
     acts.append(button(inArtifact ? '複製邀請連結' : '分享給朋友', async () => {
+      track('share', { method: inArtifact ? 'copy_link' : 'native', content_type: kind });
       if (inArtifact) { await copyText(shareUrl(chat.id)); toast('邀請連結已複製'); }
       else shareCanvas(await getCanvas(), filename, shareText || title);
     }));
@@ -210,31 +235,33 @@ function viewer({ title, canvas, src, filename, alt, shareText }) {
 const safeName = s => s.replace(/[\\/:*?"<>|！～…]/g, '');
 
 function openBuild(s) {
+  track('open_item', { item_type: 'build', item_id: s.b.id });
   const have = Object.keys(collection()).filter(id => BUILDS.some(b => b.id === id)).length;
   viewer({
     title: `${s.b.tier}｜${s.b.name}`, canvas: buildCard(stage, font, createScenery, s.b, TIERS[s.b.tier], { have, total: BUILDS.length }),
     filename: safeName(`川哥的微縮建設-${s.b.name}.png`), alt: `川哥蓋的微縮模型：${s.b.name}`,
-    shareText: `川哥幫我蓋了「${s.b.name}」（${s.b.tier}）！你也來跟川伯聊天`,
+    shareText: `川哥幫我蓋了「${s.b.name}」（${s.b.tier}）！你也來跟川伯聊天`, kind: 'build',
   });
 }
 
 function onTap(h) {
+  if (h.type !== 'avatar' && h.type !== 'bubble') track('open_item', { item_type: h.type, item_id: h.id || h.title || '' });
   switch (h.type) {
     case 'sticker': {
       const s = STICKERS[h.id];
-      viewer({ title: `貼圖「${s?.text || ''}」`, canvas: stickerCanvas(stage, font, h.id, h.who), filename: safeName(`川伯貼圖-${s?.text || h.id}.png`), alt: s?.text });
+      viewer({ title: `貼圖「${s?.text || ''}」`, canvas: stickerCanvas(stage, font, h.id, h.who), filename: safeName(`川伯貼圖-${s?.text || h.id}.png`), alt: s?.text, kind: h.type });
       break;
     }
     case 'photo':
-      viewer({ title: PHOTOS[h.id]?.alt || '川伯傳來的照片', src: `photos/${h.id}.jpg`, filename: `川伯-${h.id}.png`, alt: PHOTOS[h.id]?.alt });
+      viewer({ title: PHOTOS[h.id]?.alt || '川伯傳來的照片', src: `photos/${h.id}.jpg`, filename: `川伯-${h.id}.png`, alt: PHOTOS[h.id]?.alt, kind: h.type });
       break;
     case 'elder': {
       const e = ELDER[h.id];
-      viewer({ title: '川伯送你的長輩圖', canvas: elderCanvas(font, h.id), filename: `長輩圖-${e.lines.join('')}.png`, alt: e.lines.join(' ') });
+      viewer({ title: '川伯送你的長輩圖', canvas: elderCanvas(font, h.id), filename: `長輩圖-${e.lines.join('')}.png`, alt: e.lines.join(' '), kind: h.type });
       break;
     }
     case 'badge':
-      viewer({ title: '我的新北事民徽章', canvas: badgeCanvas(stage, font, chat.id, 900, 'iso'), filename: `新北事民徽章-${serial}.png`, alt: `新北事民徽章 No. ${serial}`, shareText: `我拿到了新北事民徽章 No. ${serial}！` });
+      viewer({ title: '我的新北事民徽章', canvas: badgeCanvas(stage, font, chat.id, 900, 'iso'), filename: `新北事民徽章-${serial}.png`, alt: `新北事民徽章 No. ${serial}`, shareText: `我拿到了新北事民徽章 No. ${serial}！`, kind: h.type });
       break;
     case 'link': case 'card': {
       const cd = CARDS[h.id] || Object.values(CARDS).find(c => c.title === h.title);
@@ -293,20 +320,24 @@ function slider(label, note, { min, max, step, value, words }, onInput) {
 function openSettings() {
   openSheet({ title: '設定與說明' }, sheet => {
     sheet.append(toggle('訊息提示音', '每則訊息出現時「叮咚」一聲。', settings.sound, v => {
-      settings.sound = v; saveSettings(); setFeel({ sound: v }); return v;
+      settings.sound = v; saveSettings(); setFeel({ sound: v }); track('setting_change', { setting: 'sound', state: v ? 'on' : 'off' }); return v;
     }));
     sheet.append(toggle('震動', canVibrate() ? '每則訊息出現時手機輕輕震一下。' : '這支手機或瀏覽器不支援網頁震動（iPhone 目前都不支援）。', settings.vibrate && canVibrate(), v => {
       if (!canVibrate()) { toast('這裡不支援震動'); return false; }
-      settings.vibrate = v; saveSettings(); setFeel({ vibrate: v }); return v;
+      settings.vibrate = v; saveSettings(); setFeel({ vibrate: v }); track('setting_change', { setting: 'vibrate', state: v ? 'on' : 'off' }); return v;
     }));
     sheet.append(toggle('立體視角', '轉動手機（電腦上是移動滑鼠），光影和角度會跟著微微改變。iPhone 會先問你是否允許使用動作感應。', settings.tilt, async v => {
       settings.tilt = v; saveSettings();
+      track('setting_change', { setting: 'tilt', state: v ? 'on' : 'off' });
       if (!v) { tilt.disable(); return false; }
       const r = await tilt.enable();
       if (r === 'pointer-only') toast('沒有取得動作感應權限，電腦上可用滑鼠體驗');
       return true;
     }));
     sheet.append(toggle('大字', '把聊天的字放大 1.2 倍。', app.big, v => { app.press('big'); return app.big; }));
+    if (!inArtifact) sheet.append(toggle('匿名使用統計', '用 Google Analytics 計算有多少人來聊天、聊到哪裡、有沒有分享，幫團隊把網頁做得更好。不會知道你是誰；關掉就不再傳送。', settings.stats, v => {
+      settings.stats = v; saveSettings(); setAnalytics(v); return v;
+    }));
     const head = document.createElement('h3'); head.className = 'set-head'; head.textContent = '畫面風格';
     sheet.append(head);
     sheet.append(slider('字的立體厚度', '字從泡泡上浮起來多高。', { min: 0.03, max: 0.32, step: 0.01, value: settings.depth, words: ['平平的，好讀', '厚厚的，很立體'] }, v => {
@@ -335,6 +366,7 @@ function openSettings() {
     sheet.append(toggle('多支手機一起玩', `把 2～${MAX_PHONES} 支手機排好平放，小川哥會從一支跑到下一支，手機越多跑越快。打開以後，要按「開始配對」才會連線。`, settings.pair, v => {
       if (v && !pairTransport) { toast('這裡不能用，請到 hammerlee.tw 試試'); return false; }
       settings.pair = v; saveSettings();
+      track('setting_change', { setting: 'pair', state: v ? 'on' : 'off' });
       if (!v) pair?.end('off');
       paintPair();
       return v;
@@ -342,7 +374,7 @@ function openSettings() {
     sheet.append(pairInfo(), pairBox);
     paintPair();
     const again = document.createElement('div'); again.className = 'acts';
-    again.append(button('跟川伯重新聊一次（換一段新的）', () => { location.hash = ''; location.reload(); }));
+    again.append(button('跟川伯重新聊一次（換一段新的）', () => restart('chat_again', { from: 'settings' })));
     sheet.append(again);
     const about = document.createElement('div'); about.className = 'about';
     about.innerHTML = `
@@ -352,6 +384,8 @@ function openSettings() {
       <h3>隱私</h3>
       <p>不需要登入，也不會要你輸入任何資料。對話結束時，只會記錄這段對話的編號、聊到的話題和時間，用來讓分享連結顯示預覽圖；
       設定只存在你自己的手機裡。立體視角只在你的手機上計算，不會傳出去。小川哥蓋的微縮建設圖鑑也只記在你的手機裡。</p>
+      <p>為了知道有多少人來聊天、聊到哪裡、有沒有分享給朋友，我們用 Google Analytics 做匿名統計：它會在你的瀏覽器存一個識別碼（Cookie），
+      Google 會收到你的大概地區、裝置類型和在這頁上的動作，但不會知道你是誰，也沒有開啟廣告追蹤。不想被統計，把上面的「匿名使用統計」關掉就好。</p>
       <p>「多支手機一起玩」是實驗功能，預設是關的。只有你打開它、按下配對以後才會連線：手機之間透過 Supabase 的即時訊息服務，
       只傳一組臨時的六位數配對碼、每支手機的號碼和排在哪裡（左右哪一邊、手指滑過的高度），和小川哥跑到哪裡、跑多快。
       不會用到你的位置（GPS）或藍牙，不會傳任何個人資料，也不會存進資料庫。結束配對或關掉網頁，連線就斷了。</p>
@@ -362,7 +396,7 @@ function openSettings() {
         <li><a href="https://github.com/chiron-fonts/chiron-goround-tc" target="_blank" rel="noopener">Chiron GoRound TC</a> — SIL Open Font License 1.1</li>
         <li>畫風參考 <a href="https://april-zhu.com/colorfigures" target="_blank" rel="noopener">Colorfigures</a>（April Zhu）— MIT License</li>
         <li><a href="https://github.com/unjs/uqr" target="_blank" rel="noopener">uqr</a>（配對用的 QR 碼）— MIT License</li>
-        <li>Google Fonts 提供網頁字型服務</li>
+        <li>Google Fonts 提供網頁字型服務；Google Analytics 提供匿名使用統計</li>
       </ul>
       <p class="note">對話編號 No. ${serial}</p>`;
     sheet.append(about);
@@ -372,11 +406,12 @@ function openSettings() {
 // ---------------------------------------------------------------------------------------------------
 // the share sheet at the end
 function openShare() {
+  track('share_open', { mode });
   if (replay) {
     openSheet({ title: '換你跟川伯聊天！' }, sheet => {
       sheet.append(para('這是朋友跟川伯的對話。每個人跟川伯聊的內容都不一樣，你的也會是獨一無二的。'));
       const acts = document.createElement('div'); acts.className = 'acts';
-      acts.append(button('開始我自己的對話', () => { location.hash = ''; location.reload(); }, 'main'));
+      acts.append(button('開始我自己的對話', () => restart('start_own_chat', { from: 'replay' }), 'main'));
       sheet.append(acts);
     });
     return;
@@ -396,14 +431,18 @@ function openShare() {
     }, 30));
     const acts = document.createElement('div'); acts.className = 'acts';
     const native = !inArtifact && !!navigator.share;
-    if (native) acts.append(button('分享給朋友…', async () => { if (card) shareCanvas(card, '跟川伯聊天.png', invite); }, 'main'));
-    acts.append(linkButton('傳給 LINE 好友', lineShareLink(url, invite), native ? 'line' : 'line main'));
-    acts.append(button('複製邀請連結', async () => { toast((await copyText(invite + ' ' + url)) ? '邀請連結已複製' : '請長按連結複製'); }));
+    const shared = method => track('share', { method, content_type: 'chat' });
+    if (native) acts.append(button('分享給朋友…', async () => { if (card) { shared('native'); shareCanvas(card, '跟川伯聊天.png', invite); } }, 'main'));
+    const line = linkButton('傳給 LINE 好友', lineShareLink(url, invite), native ? 'line' : 'line main');
+    line.addEventListener('click', () => shared('line'));
+    acts.append(line);
+    acts.append(button('複製邀請連結', async () => { shared('copy_link'); toast((await copyText(invite + ' ' + url)) ? '邀請連結已複製' : '請長按連結複製'); }));
     const two = document.createElement('div'); two.className = 'acts two';
-    two.append(button('下載分享圖', async () => { if (card) saveCanvas(card, `跟川伯聊天-${serial}.png`); }));
-    two.append(button('下載徽章', async () => saveCanvas(badgeCanvas(stage, font, chat.id, 900, 'iso'), `新北事民徽章-${serial}.png`)));
+    two.append(button('下載分享圖', async () => { if (card) { shared('download_card'); saveCanvas(card, `跟川伯聊天-${serial}.png`); } }));
+    two.append(button('下載徽章', async () => { shared('download_badge'); saveCanvas(badgeCanvas(stage, font, chat.id, 900, 'iso'), `新北事民徽章-${serial}.png`); }));
     sheet.append(acts, two);
     const longBtn = button('下載整段對話長圖', async () => {
+      shared('download_long');
       longBtn.disabled = true; longBtn.textContent = '長圖製作中…';
       const cv = await longImage(stage, font, chat, builderOpts, { onProgress: p => { longBtn.textContent = `長圖製作中… ${Math.round(p * 100)}%`; } });
       longBtn.textContent = '下載整段對話長圖'; longBtn.disabled = false;
@@ -413,7 +452,7 @@ function openShare() {
     sheet.append(one);
     sheet.append(para('朋友打開連結，會看到跟你一模一樣的這段對話，看完也能開始他自己的。', 'note'));
     const again = document.createElement('div'); again.className = 'acts';
-    again.append(button('跟川伯再聊一次（換一段新的）', () => { location.hash = ''; location.reload(); }));
+    again.append(button('跟川伯再聊一次（換一段新的）', () => restart('chat_again', { from: 'share' })));
     sheet.append(again);
   });
 }

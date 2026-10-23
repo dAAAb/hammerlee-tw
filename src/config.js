@@ -7,6 +7,7 @@ export const CONFIG = {
   // Supabase project hammerlee-tw (Tokyo). The anon key is public by design: row-level security decides what
   // it may do (add a finished chat, read one back, attach its share picture once).
   supabaseUrl: 'https://ksbsjodfubmtttklalob.supabase.co',
+  gaId: 'G-0MRNRPCG0C',
   supabaseAnonKey: 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImtzYnNqb2RmdWJtdHR0a2xhbG9iIiwicm9sZSI6ImFub24iLCJpYXQiOjE3OTI3NTEwNjYsImV4cCI6MjEwODMyNzA2Nn0.YyFQhLMJOYgnb8R73ZKPuqGDo-djvCvp9rvo3WMpP4E',
 };
 

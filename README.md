@@ -135,6 +135,29 @@ Artifact 預覽版在沙盒裡，不能連外部服務；它的內建資料庫�
 
 分享時，頁面會把分享卡上傳到 Supabase Storage，LINE / Facebook 讀 `/s/<編號>` 時就會顯示那張卡片。
 
+## 使用統計（Google Analytics 4）
+
+資源「hammerlee.tw｜跟川伯聊天」（juchunko 帳戶，評估 ID `G-0MRNRPCG0C`），只在 hammerlee.tw 上載入。
+Google 信號與廣告個人化都關閉，網址裡的 `#c-` 對話編號不會送出；訪客可以在「設定」關掉「匿名使用統計」。
+本機想看事件順序，可以開 `?ga-dry`（只排進 `dataLayer`，不連 Google）。
+
+| 事件 | 什麼時候 | 參數（已註冊為自訂維度） |
+|---|---|---|
+| `chat_start` | 第一則訊息出現 | `mode`：`own` 自己的對話／`replay` 朋友分享的 |
+| `chat_progress` | 聊到 25%、50%、75% | `percent`、`mode` |
+| `topic_view` | 聊到一個新北政見 | `topic`、`category` |
+| `chat_complete` | 聊完、拿到徽章 | `mode` |
+| `share_open` | 打開分享面板 | `mode` |
+| `share` | 分享或下載 | `method`（內建維度）：`native`、`line`、`copy_link`、`download_card`、`download_badge`、`download_long`、`download`；`content_type` |
+| `replay_view` | 從朋友的分享連結進來 | |
+| `start_own_chat` / `chat_again` | 開始自己的／再聊一次 | `from` |
+| `open_item` | 點開貼圖、照片、長輩圖、徽章、政見卡、川哥的微縮建設（`item_type`：`build`） | `item_type`、`item_id` |
+| `build_made` | 川哥蓋好一個微縮建設 | `item_type`：等級（N、R、SR、SSR、UR）；`item_id`：哪一個 |
+| `setting_change` / `auto_chat` | 大字、聲音、震動、立體視角、多支手機一起玩（`pair`）／自動聊 | `setting`、`state` |
+| `fast_forward`、`runner_tap` | 「跟川伯說掰掰」快轉、點跑過去的川伯 | |
+
+分享帶來的新對話：看 `replay_view` → `start_own_chat`；完成率：`chat_complete` ÷ `chat_start`。
+
 ## 授權與素材
 - 字型：Huninn（jf 粉圓，OFL）、Chiron GoRound TC（OFL）。
 - 配對 QR 碼：uqr（MIT，Project Nayuki 的 QR 編碼器）。
