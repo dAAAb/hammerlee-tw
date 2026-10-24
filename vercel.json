@@ -29,7 +29,7 @@
         },
         {
           "key": "Permissions-Policy",
-          "value": "accelerometer=(self), gyroscope=(self), magnetometer=(self), web-share=(self), clipboard-write=(self), camera=(), microphone=(), geolocation=(), payment=(), usb=(), browsing-topics=()"
+          "value": "accelerometer=(self), gyroscope=(self), magnetometer=(self), web-share=(self), clipboard-write=(self), camera=(self), xr-spatial-tracking=(self), microphone=(), geolocation=(), payment=(), usb=(), browsing-topics=()"
         },
         {
           "key": "Strict-Transport-Security",

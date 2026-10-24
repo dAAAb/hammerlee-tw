@@ -119,6 +119,16 @@ npm run serve               # http://localhost:5173
 `?lag=150` 模擬慢網路；`?realtime` 改走 Supabase Realtime。用兩支真手機測：同一個 Wi‑Fi 下兩支都打開 `http://<電腦 IP>:5173/?realtime`。
 建置時若有任何字在兩套字型裡都找不到，會直接失敗，所以不會漏字。
 
+## 在你家擺擺看（AR）
+
+`src/fx/ar.js`。貼圖、徽章、微縮建設的放大視窗，以及長按跑過去的小川哥，都會出現「在你家擺擺看（AR）」：
+
+- **iPhone／iPad（Safari）**：在網頁裡把模型轉成 USDZ（three.js 的 `USDZExporter`），用 `<a rel="ar">` 打開 AR Quick Look。檔案只在手機記憶體裡，不上傳。USDZ 不支援鏡像與一個物件多種材質，所以先把每個零件的位置烘進幾何、一個材質一個零件，再縮成實際大小（貼圖約 22 公分、徽章 16、建設 32、小川哥 28）。Quick Look 的模型是靜止的。
+- **Android（Chrome，需要 Google Play 服務的 AR）**：WebXR `immersive-ar`，用 hit-test 找地面或桌面，點一下放上去；小川哥在裡面會繼續動。
+- AR 檢視器跑不了我們的卡通著色器和墨線後製，所以模型換成同色系的標準材質，由真實環境打光。
+- 其他瀏覽器（例如 LINE 內建瀏覽器）不顯示按鈕；在 LINE 裡會提示改用 Safari／Chrome 打開。
+- `vercel.json` 的 Permissions-Policy 允許本站使用 `xr-spatial-tracking` 與相機（WebXR 需要）。
+
 ## 投票日與之後
 
 `src/chat/calendar.js` 依台灣時間判斷：11/28 投票日之前是平常的網頁；**投票日當天**依選舉規定不從事競選活動，網頁只顯示「今天是投票日，暫停一天」（`src/ui/daynotice.js`），分享連結也不再邀請、不帶對話；**之後**先顯示感謝頁，按「看看當時的對話」才進入聊天。分享頁的 CDN 快取不會跨過日期分界。
@@ -151,6 +161,8 @@ Google 訊號與廣告個人化都關閉，網址裡的 `#c-` 對話編號不會
 | `build_made` | 川哥蓋好一個微縮建設 | `item_type`：等級（N、R、SR、SSR、UR）；`item_id`：哪一個 |
 | `setting_change` / `auto_chat` | 大字、聲音、震動、立體視角、多支手機一起玩（`pair`）／自動聊 | `setting`、`state` |
 | `fast_forward`、`runner_tap` | 「跟川伯說掰掰」快轉、點跑過去的川伯 | |
+| `ar_open` | 打開 AR | `item_type`（sticker、badge、build、chuan）；`mode`：`quicklook` 或 `webxr` |
+| `ar_hold` | 長按小川哥 | `supported`：這支手機能不能用 AR |
 
 分享帶來的新對話：看 `replay_view` → `start_own_chat`；完成率：`chat_complete` ÷ `chat_start`。
 

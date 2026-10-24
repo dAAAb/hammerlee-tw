@@ -338,12 +338,29 @@ export class App {
       if (e.key === 'ArrowDown' || e.key === ' ' || e.key === 'PageDown') stop();
     });
     // taps on 3D things (stickers, photos, cards, the badge, 川伯's avatar)
-    let down = null;
+    let down = null, holdTimer = 0;
     const cv = this.stage.canvas;
-    addEventListener('pointerdown', e => { down = { x: e.clientX, y: e.clientY, t: performance.now(), on: e.target }; }, { passive: true });
+    const onPage = on => on === cv || on === document.documentElement || on === document.body || !!on?.closest?.('.tl');
+    const letGo = () => { clearTimeout(holdTimer); if (down) down.hold = false; };
+    addEventListener('pointerdown', e => {
+      down = { x: e.clientX, y: e.clientY, t: performance.now(), on: e.target };
+      // holding a finger on something that wants it (川哥 running past) is its own gesture
+      clearTimeout(holdTimer);
+      if (onPage(e.target) && this.hooks.holdable?.(e.clientX, e.clientY, e.pointerType === 'touch')) {
+        down.hold = true;
+        const d = down;
+        holdTimer = setTimeout(() => { if (d.hold && down === d) { d.held = true; this.hooks.hold?.(); } }, 550);
+      }
+    }, { passive: true });
+    addEventListener('pointermove', e => { if (down?.hold && Math.hypot(e.clientX - down.x, e.clientY - down.y) > 12) letGo(); }, { passive: true });
+    addEventListener('pointercancel', letGo, { passive: true });
+    // no text selection or long-press menu while holding 川哥
+    for (const ev of ['selectstart', 'contextmenu']) addEventListener(ev, e => { if (down?.hold || down?.held) e.preventDefault(); });
     addEventListener('pointerup', e => {
+      clearTimeout(holdTimer);
+      if (down?.held) { down = null; return; }
       // the selectable text sits over the bubbles; a finger lands on one of its lines, not the .tl box itself
-      if (!down || (down.on !== cv && down.on !== document.documentElement && down.on !== document.body && !down.on?.closest?.('.tl'))) { down = null; return; }
+      if (!down || !onPage(down.on)) { down = null; return; }
       const moved = Math.hypot(e.clientX - down.x, e.clientY - down.y);
       const quick = performance.now() - down.t < 450;
       if (moved < 10 && quick && !(window.getSelection()?.toString())) this.tapAt(e.clientX, e.clientY, e.pointerType === 'touch');

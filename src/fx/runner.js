@@ -172,10 +172,14 @@ export class Runner {
 
   // tap test from the app (returns true when he was hit)
   hit(raycaster, at) {
-    if (!this.g.visible) return false;
-    if (!raycaster.intersectObject(this.g, true)[0] && !(at?.touch && this.near(at.x, at.y))) return false;
+    if (!this.under(raycaster, at)) return false;
     this.jump();
     return true;
+  }
+  // is he under this point (a finger gets a margin around him)?
+  under(raycaster, at) {
+    if (!this.g.visible) return false;
+    return !!raycaster.intersectObject(this.g, true)[0] || !!(at?.touch && this.near(at.x, at.y));
   }
 
   // fingers are blunt and he keeps running: on touch, anywhere close to his outline on screen counts

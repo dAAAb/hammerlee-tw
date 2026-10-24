@@ -26,7 +26,8 @@ import { play, setFeel, soundFor, canVibrate } from './fx/feel.js';
 import { Tilt } from './fx/tilt.js';
 import { SideScenery } from './fx/scenery-side.js';
 import { createScenery } from './models/scenery.js';
-import { registerModels } from './models/registry.js';
+import { registerModels, sticker as stickerModel } from './models/registry.js';
+import { detectAR, canAR, support as arSupport, usdzURL, quickLookLink, startWebXR, AR_CSS } from './fx/ar.js';
 import { makeEmoji } from './models/emoji.js';
 import { createMeSticker } from './models/stickers-me.js';
 import { createChuanSticker } from './models/stickers-chuan.js';
@@ -38,7 +39,7 @@ import { PAIR_CSS, openPairSheet, offerJoin, pairChip, pairInfo } from './ui/pai
 registerModels({ makeEmoji, createMeSticker, createChuanSticker, createChuanAvatar, createChuan, createChuanHead });
 
 const style = document.createElement('style');
-style.textContent = TEXT_LAYER_CSS + SHEET_CSS + PAIR_CSS;
+style.textContent = TEXT_LAYER_CSS + SHEET_CSS + PAIR_CSS + AR_CSS;
 document.head.append(style);
 
 const q = new URLSearchParams(location.search);
@@ -132,6 +133,13 @@ const app = new App({
     relayout() { scenery?.reset(); builds?.reset(); },
     topic(t) { runner?.topic(); track('topic_view', { topic: t.id, category: t.cat }); },
     avatarTap() { runner?.summon(); },
+    // holding a finger on 川哥 as he runs past: bring him into your room (AR)
+    holdable(x, y, touch) {
+      if (!runner || runner.state === 'off') return false;
+      const ray = stage.ray(x, y);
+      return runner.under(new THREE.Raycaster(ray.origin, ray.direction, 0, 1000), { x, y, touch });
+    },
+    hold() { play('boing'); openChuanAR(); },
     tapExtra(rc, d, at) {
       // 川哥 himself, then a build, then the finger-sized area around him
       if (runner?.hit(rc)) { track('runner_tap'); return true; }
@@ -182,8 +190,9 @@ function getPair() {
   return pair;
 }
 window.__app = app;
+detectAR();
 if (/^\d{1,3}$/.test(q.get('at') || '')) app.jumpTo(+q.get('at'));   // dev aid; anything else is ignored
-if (q.has('debug')) window.__hl = { stage, font, chat, builderOpts, shareCard, longImage, badgeCanvas, stickerCanvas, renderSnippet, pickSnippet, buildCard, createScenery, BUILDS, TIERS };
+if (q.has('debug')) window.__hl = { arSupport, usdzURL, stickerModel, makeBadge, standingBadge, makeChuanForAR, onTap: h => onTap(h), stage, font, chat, builderOpts, shareCard, longImage, badgeCanvas, stickerCanvas, renderSnippet, pickSnippet, buildCard, createScenery, BUILDS, TIERS };
 
 // ---------------------------------------------------------------------------------------------------
 // copying from the selectable text layer: one message per line, emoji as real emoji
@@ -221,8 +230,9 @@ async function shareCanvas(cv, name, text) {
 
 const SOURCE = '取自李四川官方 Portaly（portaly.cc/hammerlee），版權屬原權利人';
 
-function viewer({ title, canvas, src, filename, alt, shareText, kind = 'item', note }) {
-  openSheet({ title }, sheet => {
+function viewer({ title, canvas, src, filename, alt, shareText, kind = 'item', note, ar }) {
+  let arDone = null;
+  openSheet({ title, onClose: () => arDone?.() }, sheet => {
     sheet.append(canvas ? picture(canvas, alt) : picture(src, alt));
     if (note) sheet.append(para(note, 'note'));
     const acts = document.createElement('div');
@@ -240,6 +250,64 @@ function viewer({ title, canvas, src, filename, alt, shareText, kind = 'item', n
       else shareCanvas(await getCanvas(), filename, shareText || title);
     }));
     sheet.append(acts);
+    if (ar) arDone = arOffer(sheet, kind, ar.make, ar.size);
+  });
+}
+
+// --- AR: "在你家擺擺看" ------------------------------------------------------------------------------------
+// make() returns { group, update?(dt) } - a fresh copy of the 3D thing; size is how big it stands, in metres.
+const ticking = (group, t0 = 0) => { let t = t0; return { group, update(dt) { t += dt; group.userData.tick?.(t, dt); } }; };
+function arOffer(sheet, kind, make, size) {
+  const label = '在你家擺擺看（AR）';
+  const row = document.createElement('div'); row.className = 'acts';
+  if (arSupport.quickLook) {
+    // iPhone: the USDZ is made right away, so the tap can open Quick Look at once
+    const a = quickLookLink('AR 準備中…', 'ar busy');
+    let url = null;
+    usdzURL(make().group, size).then(u => { url = u; a.href = u; a.lastChild.textContent = label; a.classList.remove('busy'); })
+      .catch(() => { a.lastChild.textContent = '這個做不成 AR，抱歉'; });
+    a.addEventListener('click', e => { if (!url) { e.preventDefault(); return; } track('ar_open', { item_type: kind, mode: 'quicklook' }); });
+    row.append(a);
+    sheet.append(row, para('會用手機的相機畫面，把它擺在桌上或地上；相機畫面不會傳給這個網站。', 'note'));
+    return () => { if (url) setTimeout(() => URL.revokeObjectURL(url), 60000); };
+  }
+  if (arSupport.webxr) {
+    row.append(button(label, () => {
+      track('ar_open', { item_type: kind, mode: 'webxr' });
+      startWebXR(make, size).catch(() => toast('這支手機沒辦法打開 AR'));
+    }, 'ar'));
+    sheet.append(row, para('會用手機的相機畫面，把它擺在桌上或地上；相機畫面不會傳給這個網站。', 'note'));
+    return null;
+  }
+  if (arSupport.line) sheet.append(para('用 Safari（iPhone）或 Chrome（Android）打開這個網頁，就能把它擺在你家（AR）。', 'note'));
+  return null;
+}
+
+// the badge lies flat in the chat; on a real table it stands up, its face toward you
+function standingBadge() {
+  const b = makeBadge(chat.id, font), g = new THREE.Group();
+  b.rotation.x = Math.PI / 2;
+  g.add(b);
+  let t = 0.6;
+  b.userData.tick?.(t, 0);
+  return { group: g, update(dt) { t += dt; b.userData.tick?.(t, dt); } };
+}
+
+// 川哥 himself, standing with his hammer and shovel
+function makeChuanForAR() {
+  const c = createChuan({ hat: true, tools: true });
+  c.setFacing?.(0);
+  c.play('idle');
+  c.update(0.4);
+  return { group: c.group, update: dt => c.update(dt) };
+}
+function openChuanAR() {
+  track('ar_hold', { supported: canAR() ? 'yes' : 'no' });
+  if (!canAR() && !arSupport.line) { toast('這支手機或瀏覽器不能用 AR。iPhone 請用 Safari，Android 請用 Chrome。', 3600); return; }
+  let done = null;
+  openSheet({ title: '把川哥帶回家', onClose: () => done?.() }, sheet => {
+    sheet.append(para('小川哥可以站到你的桌上或地上，陪你一下下。'));
+    done = arOffer(sheet, 'chuan', makeChuanForAR, 0.28);
   });
 }
 
@@ -252,6 +320,7 @@ function openBuild(s) {
     title: `${s.b.tier}｜${s.b.name}`, canvas: buildCard(stage, font, createScenery, s.b, TIERS[s.b.tier], { have, total: BUILDS.length }),
     filename: safeName(`川哥的微縮建設-${s.b.name}.png`), alt: `川哥蓋的微縮模型：${s.b.name}`,
     shareText: `川哥幫我蓋了「${s.b.name}」（${s.b.tier}）！你也來跟川伯聊天`, kind: 'build',
+    ar: { make: () => { const g = createScenery(s.b.model); g.userData.pop?.(1); return ticking(g, 1.3); }, size: 0.32 },
   });
 }
 
@@ -260,7 +329,8 @@ function onTap(h) {
   switch (h.type) {
     case 'sticker': {
       const s = STICKERS[h.id];
-      viewer({ title: `貼圖「${s?.text || ''}」`, canvas: stickerCanvas(stage, font, h.id, h.who), filename: safeName(`川伯貼圖-${s?.text || h.id}.png`), alt: s?.text, kind: h.type });
+      viewer({ title: `貼圖「${s?.text || ''}」`, canvas: stickerCanvas(stage, font, h.id, h.who), filename: safeName(`川伯貼圖-${s?.text || h.id}.png`), alt: s?.text, kind: h.type,
+        ar: { make: () => ticking(stickerModel(h.id, font, h.who), 0.6), size: 0.22 } });
       break;
     }
     case 'photo':
@@ -272,7 +342,8 @@ function onTap(h) {
       break;
     }
     case 'badge':
-      viewer({ title: '我的新北事民徽章', canvas: badgeCanvas(stage, font, chat.id, 900, 'iso'), filename: `新北事民徽章-${serial}.png`, alt: `新北事民徽章 No. ${serial}`, shareText: `我拿到了新北事民徽章 No. ${serial}！`, kind: h.type });
+      viewer({ title: '我的新北事民徽章', canvas: badgeCanvas(stage, font, chat.id, 900, 'iso'), filename: `新北事民徽章-${serial}.png`, alt: `新北事民徽章 No. ${serial}`, shareText: `我拿到了新北事民徽章 No. ${serial}！`, kind: h.type,
+        ar: { make: standingBadge, size: 0.16 } });
       break;
     case 'link': case 'card': {
       const cd = CARDS[h.id] || Object.values(CARDS).find(c => c.title === h.title);
@@ -394,7 +465,7 @@ function openSettings() {
       <a href="https://portaly.cc/hammerlee" target="_blank" rel="noopener">李四川官方 Portaly</a>。</p>
       <h3>隱私</h3>
       <p>不需要登入，也不會要你輸入任何資料。對話結束時，只會記錄這段對話的編號、聊到的話題和時間，用來讓分享連結顯示預覽圖；
-      設定只存在你自己的手機裡。立體視角只在你的手機上計算，不會傳出去。小川哥蓋的微縮建設圖鑑也只記在你的手機裡。</p>
+      設定只存在你自己的手機裡。立體視角只在你的手機上計算，不會傳出去。用 AR 把東西擺在你家時，用的是手機自己的相機功能，相機畫面不會傳給這個網站。小川哥蓋的微縮建設圖鑑也只記在你的手機裡。</p>
       <p>為了知道有多少人來聊天、聊到哪裡、有沒有分享給朋友，我們用 Google Analytics 做匿名統計：它會在你的瀏覽器存一個識別碼（Cookie），
       Google 會收到你的大概地區、裝置類型和在這頁上的動作，但不會知道你是誰，也沒有開啟廣告追蹤。不想被統計，把上面的「匿名使用統計」關掉就好。</p>
       <p>「多支手機一起玩」是實驗功能，預設是關的。只有你打開它、按下配對以後才會連線：手機之間透過 Supabase 的即時訊息服務，
